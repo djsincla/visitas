@@ -1,0 +1,15 @@
+node_modules/
+data/
+data-e2e/
+playwright-report/
+test-results/
+*.log
+.env
+.env.local
+config/gcal-service-account.json
+config/gcal-*.json
+.DS_Store
+dist/
+coverage/
+.vscode/
+.idea/

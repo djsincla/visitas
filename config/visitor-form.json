@@ -1,0 +1,69 @@
+{
+  "$comment": "Sample visitor sign-in form. Seeded into the DB on first migration; admin UI is authoritative thereafter (same pattern as cambiar/config/change-types.json). Edit this file before first deploy to customize what the kiosk asks visitors. v0.1 ships this file but does not yet consume it — v0.2 introduces the kiosk sign-in flow that reads from the seeded fields.",
+  "fields": [
+    {
+      "key": "name",
+      "label": "Your name",
+      "type": "text",
+      "required": true,
+      "placeholder": "First and last"
+    },
+    {
+      "key": "company",
+      "label": "Company",
+      "type": "text",
+      "required": false
+    },
+    {
+      "key": "email",
+      "label": "Email",
+      "type": "email",
+      "required": false
+    },
+    {
+      "key": "phone",
+      "label": "Mobile number",
+      "type": "tel",
+      "required": false,
+      "$comment": "Optional. Used for SMS host-arrival pings if SMS is enabled."
+    },
+    {
+      "key": "host",
+      "label": "Who are you here to see?",
+      "type": "host-typeahead",
+      "required": true,
+      "$comment": "Special type — populated server-side from local users + the AD visitas-world group. Renders as an autocomplete on the kiosk."
+    },
+    {
+      "key": "purpose",
+      "label": "Reason for visit",
+      "type": "select",
+      "required": true,
+      "options": ["Meeting", "Client review", "Delivery", "Interview", "Vendor", "Other"]
+    },
+    {
+      "key": "notes",
+      "label": "Anything else we should know?",
+      "type": "textarea",
+      "required": false
+    }
+  ],
+  "nda": {
+    "enabled": false,
+    "$comment": "NDA capture lands in v0.5. Drop the body in here, set enabled=true, the kiosk presents it after the form fields and captures a drawn signature.",
+    "version": "1.0",
+    "title": "Visitor non-disclosure agreement",
+    "body": ""
+  },
+  "safety": {
+    "enabled": false,
+    "$comment": "Safety briefing acknowledgment lands in v0.5. Set enabled=true, fill in body, the kiosk presents it as a tap-to-acknowledge step.",
+    "version": "1.0",
+    "title": "Workshop safety briefing",
+    "body": ""
+  },
+  "photo": {
+    "enabled": false,
+    "$comment": "Photo capture lands in v0.6 (uses the iPad's front camera). Stored 30 days, then purged. Printed on the badge."
+  }
+}

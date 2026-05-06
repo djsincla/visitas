@@ -1,0 +1,54 @@
+import { readFileSync, existsSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(__dirname, '../..');
+
+dotenv.config({ path: resolve(repoRoot, 'server/.env') });
+
+function readJson(relPath, fallback) {
+  const p = resolve(repoRoot, relPath);
+  if (!existsSync(p)) return fallback;
+  return JSON.parse(readFileSync(p, 'utf8'));
+}
+
+export const config = {
+  repoRoot,
+  port: Number(process.env.PORT ?? 3000),
+  env: process.env.NODE_ENV ?? 'development',
+  dataDir: resolve(repoRoot, process.env.DATA_DIR ?? './data'),
+  baseUrl: process.env.BASE_URL ?? `http://localhost:${process.env.PORT ?? 3000}`,
+  logLevel: process.env.LOG_LEVEL ?? 'info',
+
+  jwt: {
+    // Lazy: only required when actually issuing/verifying tokens. CLI tools
+    // that touch the DB but not auth (e.g. reset-admin) don't need this set.
+    get secret() {
+      const v = process.env.JWT_SECRET;
+      if (!v) throw new Error('Missing required env var: JWT_SECRET');
+      return v;
+    },
+    ttlSeconds: Number(process.env.JWT_TTL_SECONDS ?? 43200),
+  },
+
+  auth: readJson('config/auth.json', {
+    local: { enabled: true },
+    ad: { enabled: false },
+  }),
+
+  notifications: readJson('config/notifications.json', {
+    email: { enabled: false },
+    sms: { enabled: false },
+  }),
+
+  adBindPassword: process.env.AD_BIND_PASSWORD ?? '',
+  smtpPassword: process.env.SMTP_PASSWORD ?? '',
+  smsAuthToken: process.env.SMS_AUTH_TOKEN ?? '',
+};
+
+export function dbPath() {
+  if (process.env.VISITAS_DB_PATH) return process.env.VISITAS_DB_PATH;
+  return resolve(config.dataDir, 'visitas.sqlite');
+}

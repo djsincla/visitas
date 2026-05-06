@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>visitas.world — visitor sign-in for small workshops</title>
+  <meta name="description" content="Lightweight visitor sign-in / registration built for small VFX and post-production workshops. iPad kiosk, local + Active Directory hosts, AirPrint badges, single-container deploy." />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="kicker">visitor sign-in · for the workshop's actual front door</p>
+    <h1>visitas.world</h1>
+    <p class="tagline">
+      A small, honest visitor sign-in app built for a VFX workshop —
+      not for a 50-floor office tower, not for a security-theater corporate lobby,
+      not for a SaaS that wants to license your reception desk.
+    </p>
+    <p class="meta">
+      Apache-2.0 · Node · SQLite · single-container deploy · API-first
+    </p>
+    <p class="cta">
+      <a class="cta-link" href="https://github.com/djsincla/visitas" target="_blank" rel="noopener">View on GitHub →</a>
+    </p>
+    <aside class="endorsement" aria-label="endorsement">
+      <span class="endorsement-stamp">★ APPROVED BY MIKE ★</span>
+      <span class="endorsement-fineprint">
+        Mike has not read the source. Mike is, however, &ldquo;sure it's fine.&rdquo;
+        Findings non-binding. Refunds available in the form of additional opinions from Mike.
+      </span>
+    </aside>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section class="block">
+  <h2>What it is</h2>
+  <p>
+    visitas.world (the name is from the Spanish noun <em>visitas</em> — &ldquo;visits&rdquo;)
+    is a self-hosted visitor sign-in app. An iPad parked at reception runs the kiosk,
+    a visitor taps in (name, company, host, purpose), the host gets pinged, an AirPrint
+    badge prints, and an active-visitors view tells you who's on-site if the fire alarm goes off.
+  </p>
+  <p>
+    It runs as a single container next to your other infrastructure. There's
+    no SaaS dependency, no &ldquo;talk to sales&rdquo;, no per-seat licensing. The data
+    file lives on your disk; you can <code>scp</code> it.
+  </p>
+  <p class="muted">
+    Sister project to <a href="https://djsincla.github.io/cambiar/">cambiar.world</a> —
+    same workshop, same stack, same philosophy.
+  </p>
+</section>
+
+<section class="block">
+  <h2>Who it's for</h2>
+  <ul class="who">
+    <li>
+      <strong>Small VFX / post-production / studio shops.</strong>
+      Where visitors are real (clients in for a review, vendors picking up gear,
+      contractors arriving for a day's work) but the team is small enough that
+      a paper book at reception used to be enough — and isn't anymore.
+    </li>
+    <li>
+      <strong>Workshops who want a fire roster without ceremony.</strong>
+      Every sign-in is logged with a timestamp. The active-visitors view shows
+      you who's currently on-site at a glance, which matters precisely once a
+      year and a great deal at that moment.
+    </li>
+    <li>
+      <strong>Teams that already have AD or just want local accounts.</strong>
+      Both work. Hosts come from local users plus members of an AD group named
+      <code>visitas-world</code>. The bootstrap admin keeps you unlocked even if AD is down.
+    </li>
+  </ul>
+</section>
+
+<section class="block">
+  <h2>What's planned</h2>
+  <p class="muted" style="margin-bottom: 16px;">
+    The project is shipping in small honest steps. v0.1 (the scaffold) is done;
+    the rest land iteratively.
+  </p>
+
+  <div class="grid">
+
+    <article>
+      <h3>v0.1 — scaffold</h3>
+      <p>
+        Express + better-sqlite3 + Vite + JWT, multi-stage Docker, GH Actions,
+        bootstrap <code>admin/admin</code>, host CRUD, branding settings,
+        configurable visitor-form schema (<code>config/visitor-form.json</code>).
+      </p>
+      <p class="muted">Where you are now.</p>
+    </article>
+
+    <article>
+      <h3>v0.2 — kiosk sign-in</h3>
+      <p>
+        The actual iPad-facing sign-in flow: visitor types name / company / host /
+        purpose, active-visitors view, sign-out at the same kiosk, full audit log.
+      </p>
+    </article>
+
+    <article>
+      <h3>v0.3 — host notifications</h3>
+      <p>
+        Email via SMTP (<code>nodemailer</code>) and SMS via a small Twilio adapter.
+        Per-host phone and email fields, configurable per-event filters.
+      </p>
+    </article>
+
+    <article>
+      <h3>v0.4 — printable badge</h3>
+      <p>
+        AirPrint-friendly badge view rendered straight from the iPad. Logo,
+        visitor name, host, date, expires-end-of-day. Configurable layout.
+      </p>
+    </article>
+
+    <article>
+      <h3>v0.5 — NDA &amp; safety</h3>
+      <p>
+        Admin-editable, versioned NDA and safety briefing acknowledgments.
+        Visitor signs the NDA on the iPad with a drawn signature, captured
+        as PNG and stored against the visit record.
+      </p>
+    </article>
+
+    <article>
+      <h3>v0.6 — pre-registration &amp; photo</h3>
+      <p>
+        Hosts pre-book expected visitors; the visitor gets an email invite with
+        a QR code. They scan it at the kiosk, the front camera captures a photo,
+        the photo prints on the badge. 30-day photo retention, then auto-purged.
+      </p>
+    </article>
+
+    <article>
+      <h3>v0.7 — AD hosts</h3>
+      <p>
+        Optional <code>ldapts</code> lookup for hosts from the
+        <code>visitas-world</code> AD group. Same env-driven on/off pattern as cambiar;
+        if <code>LDAP_*</code> env vars are set the host list pulls from AD,
+        otherwise local-only.
+      </p>
+    </article>
+
+    <article>
+      <h3>Branding</h3>
+      <p>
+        Admin-uploadable logo (PNG / SVG / JPEG / WebP) and app name.
+        Renders on the topbar, the login screen, the kiosk welcome card,
+        and the printed badge. Light and dark themes, persisted per browser.
+      </p>
+    </article>
+
+    <article>
+      <h3>API-first</h3>
+      <p>
+        Every UI action is a documented HTTP endpoint. Build your own
+        integrations, scripts, or in-house tools against the same surface
+        the kiosk uses — no internal-only RPCs.
+      </p>
+    </article>
+
+  </div>
+</section>
+
+<section class="block">
+  <h2>What it isn't</h2>
+  <p>
+    Honesty is part of the design. visitas.world <strong>is not</strong>:
+  </p>
+  <ul>
+    <li>A workplace management platform. No desk booking, no room reservations, no asset tracking.</li>
+    <li>A CRM. The visitor record exists for safety + audit, not for marketing.</li>
+    <li>A multi-tenant SaaS. One container, one workshop. If you need tenancy, you're past our scope.</li>
+    <li>An access control system. We tell you who's on-site; we don't unlock doors.</li>
+    <li>A fit for 500-person organizations. Tools that work at that scale don't usually work at ours.</li>
+  </ul>
+</section>
+
+<section class="block">
+  <h2>Trying it</h2>
+  <pre><code>git clone https://github.com/djsincla/visitas.git &amp;&amp; cd visitas
+cp .env.example .env
+# set JWT_SECRET to something long and random
+docker compose up -d --build
+# open http://localhost:3000
+# log in: admin / admin  (forced password change on first login)
+# kiosk surface lives at http://localhost:3000/kiosk</code></pre>
+  <p>
+    SQLite database persists in <code>./data/</code>. Configuration in
+    <code>./config/</code> (mounted read-only). Edit
+    <code>config/visitor-form.json</code> before first deploy to customize what
+    the kiosk asks visitors.
+  </p>
+</section>
+
+<section class="block">
+  <h2>Issues &amp; support</h2>
+  <p>
+    Bug reports, feature requests, and questions all go to GitHub Issues.
+    There's no separate ticket queue, no support email, no
+    &ldquo;contact our team&rdquo; form — every conversation lives in the open where
+    the workshop and any contributors can see it.
+  </p>
+  <p>
+    <a class="cta-link" href="https://github.com/djsincla/visitas/issues" target="_blank" rel="noopener">Open or browse issues →</a>
+  </p>
+</section>
+
+<section class="block">
+  <h2>The shape of the project</h2>
+  <ul>
+    <li>Node 20+ on Express, SQLite via <code>better-sqlite3</code>.</li>
+    <li>React + Vite SPA. Single bundle, served by the same container.</li>
+    <li>JWT in HttpOnly cookies, bcrypt for local passwords.</li>
+    <li>Active Directory via <code>ldapts</code>, optional and disabled by default.</li>
+    <li>Email via SMTP (<code>nodemailer</code>); SMS via a small Twilio adapter (v0.3).</li>
+    <li>Apache-2.0. Source: <a href="https://github.com/djsincla/visitas" target="_blank" rel="noopener">github.com/djsincla/visitas</a>.</li>
+  </ul>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>
+      visitas.world — built for the workshop, by the people the workshop
+      answers to.
+    </p>
+    <p class="muted">
+      Apache-2.0 licensed. No tracking, no analytics, no third-party
+      requests on this page.
+      &nbsp;·&nbsp;
+      <a href="https://github.com/djsincla/visitas" target="_blank" rel="noopener">Source</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/djsincla/visitas/issues" target="_blank" rel="noopener">Issues &amp; support</a>
+      &nbsp;·&nbsp;
+      <a href="https://djsincla.github.io/cambiar/" target="_blank" rel="noopener">Sister project: cambiar.world</a>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>
