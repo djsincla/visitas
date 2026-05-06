@@ -109,6 +109,112 @@ tbody tr:hover { background: var(--panel-2); }
 .kiosk-card .kiosk-cta { font-size: 20px; padding: 16px 28px; }
 .kiosk-stub { color: var(--muted); font-size: 14px; margin-top: 24px; font-style: italic; }
 
+/* Kiosk form variant — left-aligned content, larger inputs for tap targets. */
+.kiosk-card.kiosk-form { text-align: left; }
+.kiosk-card.kiosk-form h1 { text-align: left; }
+.kiosk-card.kiosk-form p { text-align: left; }
+.kiosk-card.kiosk-form input,
+.kiosk-card.kiosk-form select,
+.kiosk-card.kiosk-form textarea { font-size: 17px; padding: 12px 14px; }
+.kiosk-card.kiosk-form label { font-size: 15px; }
+
+/* Host typeahead suggestion list. */
+.host-suggestions {
+  margin-top: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.host-suggestion {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: var(--text);
+  border: none;
+  padding: 12px 14px;
+  font-size: 16px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.host-suggestion:last-child { border-bottom: none; }
+.host-suggestion:hover { background: var(--panel); color: var(--accent); }
+
+/* Kiosk sign-out — list of currently active visitors as big tap targets. */
+.kiosk-card.kiosk-signout { text-align: left; max-width: 640px; }
+.signout-list { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.signout-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  font-size: 17px;
+  cursor: pointer;
+  text-align: left;
+}
+.signout-item:hover:not(:disabled) { background: var(--panel); border-color: var(--accent); }
+.signout-name { font-size: 18px; font-weight: 600; }
+.signout-host { font-size: 14px; }
+
+/* Public wall view — full-screen, large text, designed to glance from a distance. */
+.wall-wrap {
+  min-height: 100vh;
+  padding: 32px 48px;
+  display: flex;
+  flex-direction: column;
+}
+.wall-header {
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 16px;
+  margin-bottom: 24px;
+}
+.wall-brand { display: flex; align-items: center; min-width: 120px; }
+.wall-brand img { max-height: 56px; max-width: 240px; }
+.wall-app-name { font-size: 22px; font-weight: 600; letter-spacing: 0.5px; }
+.wall-title { font-size: 32px; font-weight: 600; flex: 1; }
+.wall-asof { color: var(--muted); font-size: 14px; }
+
+.wall-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: var(--muted);
+}
+
+.wall-list { list-style: none; padding: 0; margin: 0; flex: 1; }
+.wall-item {
+  display: grid;
+  grid-template-columns: 1.2fr 1.5fr auto;
+  gap: 24px;
+  align-items: baseline;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 22px;
+}
+.wall-name { font-weight: 600; }
+.wall-host { color: var(--muted); }
+.wall-duration { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+.wall-footer {
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+  padding-top: 12px;
+  font-size: 13px;
+}
+
 /* ---------------------------------------------------------------- */
 /* Responsive: tablet                                               */
 /* ---------------------------------------------------------------- */
@@ -136,6 +242,10 @@ tbody tr:hover { background: var(--panel-2); }
   .kiosk-card { padding: 28px 20px; }
   .kiosk-card h1 { font-size: 24px; }
   .kiosk-card p { font-size: 16px; }
+
+  .wall-wrap { padding: 16px 20px; }
+  .wall-title { font-size: 22px; }
+  .wall-item { grid-template-columns: 1fr; gap: 4px; padding: 12px 0; font-size: 18px; }
 
   input[type="text"], input[type="email"], input[type="number"], input[type="url"], input[type="tel"], textarea, select { width: 100%; max-width: 100%; box-sizing: border-box; }
 }

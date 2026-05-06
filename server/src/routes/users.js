@@ -7,7 +7,10 @@ import { config } from '../config.js';
 
 const router = Router();
 
+// Admin-only — security users cannot manage other users.
 router.use(requireAuth, blockIfPasswordChangeRequired, requireRole('admin'));
+
+const ROLES = ['admin', 'security'];
 
 const createSchema = z.object({
   username: z.string().min(1).max(64).regex(/^[A-Za-z0-9._-]+$/, 'username must be alphanumeric (with . _ -)'),
@@ -15,6 +18,7 @@ const createSchema = z.object({
   email: z.string().email().nullable().optional(),
   displayName: z.string().max(128).nullable().optional(),
   phone: z.string().max(32).nullable().optional(),
+  role: z.enum(ROLES).optional(),
 }).strict();
 
 const patchSchema = z.object({
@@ -22,6 +26,7 @@ const patchSchema = z.object({
   displayName: z.string().max(128).nullable().optional(),
   phone: z.string().max(32).nullable().optional(),
   active: z.boolean().optional(),
+  role: z.enum(ROLES).optional(),
 }).strict();
 
 const resetPasswordSchema = z.object({
@@ -47,15 +52,17 @@ router.post('/', async (req, res) => {
   const exists = db.prepare('SELECT 1 FROM users WHERE username = ?').get(parse.data.username);
   if (exists) return res.status(409).json({ error: 'username already taken' });
 
+  const role = parse.data.role ?? 'admin';
   const hash = await hashPassword(parse.data.password);
   const info = db.prepare(`
     INSERT INTO users (username, email, display_name, password_hash, source, role, must_change_password, active, phone)
-    VALUES (?, ?, ?, ?, 'local', 'admin', 1, 1, ?)
+    VALUES (?, ?, ?, ?, 'local', ?, 1, 1, ?)
   `).run(
     parse.data.username,
     parse.data.email ?? null,
     parse.data.displayName ?? null,
     hash,
+    role,
     parse.data.phone ?? null,
   );
 
@@ -71,10 +78,14 @@ router.patch('/:id', (req, res) => {
   const parse = patchSchema.safeParse(req.body);
   if (!parse.success) return res.status(400).json({ error: 'invalid request', details: parse.error.flatten() });
 
-  // Last-admin protection: refuse to deactivate the only remaining active admin.
-  if (parse.data.active === false && target.active && target.role === 'admin') {
-    const activeCount = db.prepare("SELECT COUNT(*) AS c FROM users WHERE role = 'admin' AND active = 1").get().c;
-    if (activeCount <= 1) return res.status(409).json({ error: 'cannot disable the last active admin' });
+  // Last-admin protection: refuse to deactivate or demote the only active admin.
+  const wouldDeactivate = parse.data.active === false && target.active && target.role === 'admin';
+  const wouldDemote = parse.data.role && parse.data.role !== 'admin' && target.role === 'admin';
+  if (wouldDeactivate || wouldDemote) {
+    const activeAdmins = db.prepare("SELECT COUNT(*) AS c FROM users WHERE role = 'admin' AND active = 1").get().c;
+    if (activeAdmins <= 1) {
+      return res.status(409).json({ error: 'cannot disable or demote the last active admin' });
+    }
   }
 
   const fields = [];
@@ -83,6 +94,7 @@ router.patch('/:id', (req, res) => {
   if ('displayName' in parse.data)  { fields.push('display_name = ?');  values.push(parse.data.displayName ?? null); }
   if ('phone' in parse.data)        { fields.push('phone = ?');         values.push(parse.data.phone ?? null); }
   if ('active' in parse.data)       { fields.push('active = ?');        values.push(parse.data.active ? 1 : 0); }
+  if ('role' in parse.data)         { fields.push('role = ?');          values.push(parse.data.role); }
   if (!fields.length) return res.json({ user: rowToUser(target) });
 
   fields.push("updated_at = datetime('now')");
@@ -107,7 +119,6 @@ router.post('/:id/reset-password', async (req, res) => {
     const err = validatePasswordStrength(password, minLen);
     if (err) return res.status(400).json({ error: err });
   } else {
-    // Generate a random one. Same complexity rules as validatePasswordStrength.
     const { generatePassword } = await import('../cli/reset-admin.js');
     password = generatePassword();
   }

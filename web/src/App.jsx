@@ -4,9 +4,12 @@ import { useBranding } from './branding.jsx';
 import { useTheme } from './theme.jsx';
 import Login from './pages/Login.jsx';
 import ChangePassword from './pages/ChangePassword.jsx';
-import Hosts from './pages/Hosts.jsx';
+import Users from './pages/Users.jsx';
 import Settings from './pages/Settings.jsx';
 import Kiosk from './pages/Kiosk.jsx';
+import KioskSignOut from './pages/KioskSignOut.jsx';
+import ActiveVisitors from './pages/ActiveVisitors.jsx';
+import WallView from './pages/WallView.jsx';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -14,16 +17,21 @@ export default function App() {
   if (loading) return <div className="login-wrap">Loading…</div>;
 
   if (!user) {
-    // Kiosk is intentionally accessible without login — it's the iPad-facing
-    // visitor sign-in surface. /login takes the operator to the admin UI.
+    // Public surfaces: kiosk (visitor sign-in/out) and the wall view.
     return (
       <Routes>
         <Route path="/kiosk" element={<Kiosk />} />
+        <Route path="/kiosk/signout" element={<KioskSignOut />} />
+        <Route path="/active" element={<WallView />} />
         <Route path="/login" element={<Login />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
   }
+
+  const isAdmin = user.role === 'admin';
+  const isSecurity = user.role === 'security';
+  const home = isSecurity ? '/admin/active-visitors' : '/admin/users';
 
   return (
     <>
@@ -31,21 +39,30 @@ export default function App() {
       <main>
         <Routes>
           <Route path="/kiosk" element={<Kiosk />} />
-          <Route path="/login" element={<Navigate to="/admin/hosts" replace />} />
+          <Route path="/kiosk/signout" element={<KioskSignOut />} />
+          <Route path="/active" element={<WallView />} />
+          <Route path="/login" element={<Navigate to={home} replace />} />
           <Route path="/change-password" element={<ChangePassword forced={user.mustChangePassword} />} />
-          <Route path="/" element={<Protected><Navigate to="/admin/hosts" replace /></Protected>} />
-          <Route path="/admin/hosts" element={<Protected><Hosts /></Protected>} />
-          <Route path="/admin/settings" element={<Protected><Settings /></Protected>} />
-          <Route path="*" element={<Navigate to="/admin/hosts" replace />} />
+          <Route path="/" element={<Protected><Navigate to={home} replace /></Protected>} />
+
+          {/* Admin or security */}
+          <Route path="/admin/active-visitors" element={<Protected role="any-staff"><ActiveVisitors /></Protected>} />
+
+          {/* Admin only */}
+          <Route path="/admin/users" element={<Protected role="admin"><Users /></Protected>} />
+          <Route path="/admin/settings" element={<Protected role="admin"><Settings /></Protected>} />
+
+          <Route path="*" element={<Navigate to={home} replace />} />
         </Routes>
       </main>
     </>
   );
 }
 
-function Protected({ children }) {
+function Protected({ children, role = 'any-staff' }) {
   const { user } = useAuth();
   if (user.mustChangePassword) return <Navigate to="/change-password" replace />;
+  if (role === 'admin' && user.role !== 'admin') return <Navigate to="/admin/active-visitors" replace />;
   return children;
 }
 
@@ -55,6 +72,8 @@ function TopBar() {
   const { theme, toggle: toggleTheme } = useTheme();
   const nav = useNavigate();
 
+  const isAdmin = user.role === 'admin';
+
   return (
     <header className="topbar">
       <div className="brand">
@@ -63,9 +82,16 @@ function TopBar() {
           : <span className="brand-text">{appName}</span>}
       </div>
       <nav>
-        <NavLink to="/admin/hosts" className={({ isActive }) => isActive ? 'active' : ''}>Hosts</NavLink>
-        <NavLink to="/admin/settings" className={({ isActive }) => isActive ? 'active' : ''}>Settings</NavLink>
-        <NavLink to="/kiosk" className={({ isActive }) => isActive ? 'active' : ''}>Kiosk</NavLink>
+        <NavLink to="/admin/active-visitors" className={({ isActive }) => isActive ? 'active' : ''}>
+          Active visitors
+        </NavLink>
+        {isAdmin && (
+          <>
+            <NavLink to="/admin/users" className={({ isActive }) => isActive ? 'active' : ''}>Users</NavLink>
+            <NavLink to="/admin/settings" className={({ isActive }) => isActive ? 'active' : ''}>Settings</NavLink>
+            <NavLink to="/kiosk" className={({ isActive }) => isActive ? 'active' : ''}>Kiosk</NavLink>
+          </>
+        )}
       </nav>
       <div className="user">
         <button
@@ -77,7 +103,7 @@ function TopBar() {
         >
           {theme === 'dark' ? '☀️' : '🌙'}
         </button>
-        <span>{user.displayName || user.username}</span>
+        <span>{user.displayName || user.username}{user.role !== 'admin' && ` · ${user.role}`}</span>
         <span className="version-pill" data-testid="version-pill" title="visitas.world version">v{version}</span>
         <button className="secondary" onClick={async () => { await logout(); nav('/login'); }}>Sign out</button>
       </div>

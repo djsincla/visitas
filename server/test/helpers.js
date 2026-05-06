@@ -15,11 +15,12 @@ export function getApp() {
  */
 export function resetDb() {
   db.exec(`
+    DELETE FROM visits;
     DELETE FROM audit_log;
     DELETE FROM settings;
     DELETE FROM users;
   `);
-  db.exec(`DELETE FROM sqlite_sequence WHERE name IN ('users', 'audit_log')`);
+  db.exec(`DELETE FROM sqlite_sequence WHERE name IN ('users', 'audit_log', 'visits')`);
 
   // Bootstrap admin (admin/admin, must change password) — same as runtime bootstrap.
   const hash = bcrypt.hashSync('admin', 4);
@@ -50,6 +51,13 @@ export function createUser({
     VALUES (?, ?, ?, ?, 'local', ?, ?, ?, ?)
   `).run(username, email, displayName, hash, role, active, mustChangePassword, phone);
   return { id: Number(info.lastInsertRowid), username, password };
+}
+
+/** Logs in admin/admin, changes password, returns the agent — usable for both admin and security tests after createUser. */
+export async function adminAgent() {
+  const a = await agentFor('admin', 'admin');
+  await a.post('/api/auth/change-password').send({ currentPassword: 'admin', newPassword: 'AAaa1234567' });
+  return a;
 }
 
 export async function agentFor(username, password) {

@@ -6,11 +6,11 @@ Visitor sign-in / registration for small workshops. Node.js + React, iPad-friend
 
 > The name is from the Spanish noun *visitas* — "visits". The repository directory and git URL keep the short form `visitas`; everywhere else (UI, emails, calendar feeds, branding) the product is **visitas.world**. Sister project to [**cambiar.world**](https://djsincla.github.io/cambiar/) — same workshop, same stack.
 
-For a higher-level overview of what the project is, who it's for, and what it deliberately is *not*, see the [project site](https://djsincla.github.io/visitas/). The rest of this README is the operator-facing manual: installation, configuration, recovery, and the v0.1 API surface.
+For a higher-level overview of what the project is, who it's for, and what it deliberately is *not*, see the [project site](https://djsincla.github.io/visitas/). The rest of this README is the operator-facing manual: installation, configuration, recovery, and the API surface.
 
 ## Status
 
-**v0.1 — scaffold.** Express + SQLite + Vite, admin login, host CRUD, branding upload, kiosk shell with a placeholder sign-in. The actual visitor sign-in flow, host notifications, badge printing, NDA capture, photo capture, pre-registration, and AD lookup all land in v0.2 onwards. See [CHANGELOG.md](CHANGELOG.md).
+**v0.2 — kiosk sign-in works.** Visitors sign in at `/kiosk`, sign out at `/kiosk/signout`, the active-visitors admin page lets reception see who's on-site (with force sign-out for end-of-day cleanup), and a public wall view at `/active` is reachable without auth for fire-drill / hallway-monitor scenarios. Two roles: `admin` (host + full admin UI) and `security` (active-visitors page + force sign-out only). Host notifications, badge printing, NDA capture, photo capture, pre-registration, and AD lookup all land in v0.3 onwards. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Contents
 
@@ -147,7 +147,7 @@ Admin → **Settings** → upload PNG / SVG / JPEG / WebP (max 1 MB). The logo r
 
 The app name (default `visitas.world`) shown in the topbar when no logo is set is also editable on this page.
 
-## API reference (v0.1)
+## API reference (v0.2)
 
 `GET /api` returns a live endpoint index.
 
@@ -159,9 +159,22 @@ The app name (default `visitas.world`) shown in the topbar when no logo is set i
 
 ### Users (admin) — `/api/users`
 - `GET /` — list
-- `POST /` — create local user (becomes a host + admin)
-- `PATCH /:id` — partial update (email, displayName, phone, active)
+- `POST /` — create local user; `role` is `admin` (host + full admin) or `security` (active-visitors only). Defaults to `admin`.
+- `PATCH /:id` — partial update (email, displayName, phone, active, role). Last-active-admin protection on disable + demote.
 - `POST /:id/reset-password` — admin reset; user must change on next login. Refuses for AD users.
+
+### Visits — `/api/visits`
+- `POST /` — **public, no auth** — `{ visitorName, hostUserId, company?, email?, phone?, purpose?, fields? }`. Trust-the-LAN; the kiosk surface is unauthenticated.
+- `GET /active` — **public, sanitized** — list of currently on-site visits with `{ id, visitorName, hostName, signedInAt }`. Used by the wall view at `/active`.
+- `POST /:id/sign-out` — visitor self-sign-out when called without auth (`signed_out_method='kiosk'`); admin/security force sign-out when called with a session cookie (`signed_out_method='admin'`, audit row records the actor).
+- `GET /` — admin or security — full list with all fields, supports `?status=on_site|signed_out`.
+- `GET /:id` — admin or security — single visit with all fields.
+
+### Visitor form schema — `/api/visitor-form`
+- `GET /` — **public** — returns the kiosk field schema, read live from `config/visitor-form.json` on each call. Edit the JSON to change what the kiosk asks. (Admin UI editing lands in a later release; until then the file is authoritative.)
+
+### Hosts (kiosk typeahead) — `/api/hosts`
+- `GET /` — **public, sanitized** — `{ hosts: [{ id, displayName }] }`. Filtered to active `role=admin` users (security users are not hosts). Used by the kiosk's host typeahead.
 
 ### Settings — `/api/settings`
 - `GET /branding` — **public** (no auth) — `{ appName, logoUrl, version }`. Used by the login screen and kiosk.

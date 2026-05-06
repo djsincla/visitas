@@ -17,18 +17,23 @@ test('bootstrap admin/admin → forced password change → topbar branding → s
   await page.getByLabel('Confirm new password').fill('NewAdmin1234');
   await page.getByRole('button', { name: 'Update password' }).click();
 
-  // Lands on Hosts page; topbar shows visitas.world default brand.
-  await expect(page.getByRole('heading', { name: 'Hosts' })).toBeVisible();
+  // Lands on Users page (admin home); topbar shows visitas.world default brand.
+  await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible();
   await expect(page.locator('.brand-text')).toHaveText('visitas.world');
 
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 });
 
-test('kiosk is reachable without auth and shows the brand', async ({ page }) => {
+test('kiosk is reachable without auth and renders the welcome form', async ({ page }) => {
   await page.goto('/kiosk');
-  await expect(page.getByText('Welcome.')).toBeVisible();
-  // Sign-in CTA is intentionally disabled in v0.1.
-  await expect(page.getByRole('button', { name: 'Sign in' })).toBeDisabled();
-  await expect(page.getByText(/v0\.1 placeholder/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Welcome.' })).toBeVisible();
+  // Standard fields render from the schema.
+  await expect(page.getByLabel(/Your name/)).toBeVisible();
+  await expect(page.getByLabel(/Reason for visit/)).toBeVisible();
+});
+
+test('public wall view is reachable without auth', async ({ page }) => {
+  await page.goto('/active');
+  await expect(page.getByText('Currently on site')).toBeVisible();
 });

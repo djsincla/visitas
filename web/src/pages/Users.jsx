@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api.js';
 
-export default function Hosts() {
+export default function Users() {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['users'],
@@ -12,31 +12,33 @@ export default function Hosts() {
   const [showNew, setShowNew] = useState(false);
   const [resetTarget, setResetTarget] = useState(null);
 
-  if (isLoading) return <div>Loading hosts…</div>;
+  if (isLoading) return <div>Loading…</div>;
   const users = data?.users ?? [];
 
   return (
     <>
       <div className="row between">
-        <h1>Hosts</h1>
-        <button onClick={() => setShowNew(s => !s)}>{showNew ? 'Cancel' : '+ Add host'}</button>
+        <h1>Users</h1>
+        <button onClick={() => setShowNew(s => !s)}>{showNew ? 'Cancel' : '+ Add user'}</button>
       </div>
 
       <p className="muted">
-        Hosts are workshop members visitors can sign in to see. They&rsquo;re also the only people who can log in to this admin UI.
-        Create a host here, hand them the generated password, they change it on first login.
+        Two roles: <code>admin</code> users are workshop members visitors can sign in to see, and they have full access to this admin UI.
+        <code> security</code> users only see the active-visitors page and can force visitors out (useful for reception or end-of-day cleanup).
+        Visitors themselves are not users.
       </p>
 
       {showNew && (
-        <NewHost onCreated={() => { setShowNew(false); qc.invalidateQueries({ queryKey: ['users'] }); }} />
+        <NewUser onCreated={() => { setShowNew(false); qc.invalidateQueries({ queryKey: ['users'] }); }} />
       )}
 
-      <div className="panel">
+      <div className="panel" style={{ padding: 0 }}>
         <table>
           <thead>
             <tr>
               <th>Username</th>
               <th>Display name</th>
+              <th>Role</th>
               <th>Email</th>
               <th>Phone</th>
               <th>Source</th>
@@ -46,23 +48,12 @@ export default function Hosts() {
           </thead>
           <tbody>
             {users.map(u => (
-              <tr key={u.id}>
-                <td>{u.username}</td>
-                <td>{u.displayName || <span className="muted">—</span>}</td>
-                <td>{u.email || <span className="muted">—</span>}</td>
-                <td>{u.phone || <span className="muted">—</span>}</td>
-                <td>
-                  <span className={`badge ${u.source === 'ad' ? '' : 'muted'}`}>{u.source}</span>
-                </td>
-                <td>
-                  {u.active
-                    ? (u.mustChangePassword ? <span className="badge muted">must change pw</span> : <span className="badge muted">active</span>)
-                    : <span className="badge disabled">disabled</span>}
-                </td>
-                <td style={{ textAlign: 'right' }}>
-                  <button className="secondary" onClick={() => setResetTarget(u)}>Reset password</button>
-                </td>
-              </tr>
+              <UserRow
+                key={u.id}
+                user={u}
+                onReset={() => setResetTarget(u)}
+                onChanged={() => qc.invalidateQueries({ queryKey: ['users'] })}
+              />
             ))}
           </tbody>
         </table>
@@ -75,12 +66,60 @@ export default function Hosts() {
   );
 }
 
-function NewHost({ onCreated }) {
+function UserRow({ user, onReset, onChanged }) {
+  const [editingRole, setEditingRole] = useState(false);
+  const [role, setRole] = useState(user.role);
+  const [err, setErr] = useState(null);
+
+  const m = useMutation({
+    mutationFn: (body) => api.patch(`/api/users/${user.id}`, body),
+    onSuccess: () => { setEditingRole(false); setErr(null); onChanged(); },
+    onError: (e) => setErr(e.data?.error || e.message),
+  });
+
+  return (
+    <tr>
+      <td>{user.username}</td>
+      <td>{user.displayName || <span className="muted">—</span>}</td>
+      <td>
+        {editingRole ? (
+          <span className="row">
+            <select value={role} onChange={e => setRole(e.target.value)} style={{ width: 'auto' }}>
+              <option value="admin">admin (host)</option>
+              <option value="security">security</option>
+            </select>
+            <button onClick={() => m.mutate({ role })} disabled={m.isPending || role === user.role}>Save</button>
+            <button className="secondary" onClick={() => { setEditingRole(false); setRole(user.role); }}>Cancel</button>
+          </span>
+        ) : (
+          <button className="secondary" onClick={() => setEditingRole(true)} title="Change role">
+            <span className={`badge ${user.role === 'security' ? '' : 'muted'}`}>{user.role}</span>
+          </button>
+        )}
+        {err && <div className="error" style={{ fontSize: 12 }}>{err}</div>}
+      </td>
+      <td>{user.email || <span className="muted">—</span>}</td>
+      <td>{user.phone || <span className="muted">—</span>}</td>
+      <td><span className={`badge ${user.source === 'ad' ? '' : 'muted'}`}>{user.source}</span></td>
+      <td>
+        {user.active
+          ? (user.mustChangePassword ? <span className="badge muted">must change pw</span> : <span className="badge muted">active</span>)
+          : <span className="badge disabled">disabled</span>}
+      </td>
+      <td style={{ textAlign: 'right' }}>
+        <button className="secondary" onClick={onReset}>Reset password</button>
+      </td>
+    </tr>
+  );
+}
+
+function NewUser({ onCreated }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [phone, setPhone] = useState('');
+  const [role, setRole] = useState('admin');
   const [err, setErr] = useState(null);
 
   const m = useMutation({
@@ -95,6 +134,7 @@ function NewHost({ onCreated }) {
     m.mutate({
       username,
       password,
+      role,
       email: email || null,
       displayName: displayName || null,
       phone: phone || null,
@@ -103,7 +143,12 @@ function NewHost({ onCreated }) {
 
   return (
     <form className="panel" onSubmit={onSubmit}>
-      <h2>New host</h2>
+      <h2>New user</h2>
+      <label>Role <span className="req">*</span></label>
+      <select value={role} onChange={e => setRole(e.target.value)}>
+        <option value="admin">admin — workshop member, hostable, full admin UI</option>
+        <option value="security">security — active-visitors page only, can force sign-out</option>
+      </select>
       <label>Username <span className="req">*</span></label>
       <input value={username} onChange={e => setUsername(e.target.value)} required autoFocus pattern="[A-Za-z0-9._-]+" />
       <label>Initial password <span className="req">*</span></label>
@@ -112,11 +157,11 @@ function NewHost({ onCreated }) {
       <input value={displayName} onChange={e => setDisplayName(e.target.value)} />
       <label>Email</label>
       <input type="email" value={email} onChange={e => setEmail(e.target.value)} />
-      <label>Mobile (for SMS notifications)</label>
+      <label>Mobile (for SMS notifications, v0.3+)</label>
       <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+15555550100" />
       {err && <div className="error">{err}</div>}
       <div style={{ marginTop: 16 }}>
-        <button type="submit" disabled={m.isPending}>{m.isPending ? 'Creating…' : 'Create host'}</button>
+        <button type="submit" disabled={m.isPending}>{m.isPending ? 'Creating…' : 'Create user'}</button>
       </div>
     </form>
   );
