@@ -4,6 +4,49 @@ All notable changes to visitas.world are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses semantic versioning.
 
+## [0.3.0] — 2026-05-06
+
+Hosts get pinged when their visitor arrives. Email via SMTP (nodemailer) and
+SMS via a small Twilio REST adapter. Both channels disabled by default; flip
+the flag in `config/notifications.json` and supply the password / auth token
+via env to switch them on.
+
+### Added
+- **`config/notifications.json`** — email + sms blocks with per-channel
+  `events[]` filter, `enabled` toggle, and transport-specific config
+  (SMTP host/port/secure/user; Twilio accountSid + fromNumber). Secrets
+  (`SMTP_PASSWORD`, `SMS_AUTH_TOKEN`) come from env vars only — never JSON.
+  Default ships both channels disabled and `events: ['signed_in']` so
+  switching on email or SMS only pings hosts on visitor arrival.
+- **`server/src/notifications/email.js`** — nodemailer transport with lazy
+  init and a `setTransportForTests(t)` seam.
+- **`server/src/notifications/sms.js`** — direct Twilio REST adapter (no SDK;
+  basic auth on `https://api.twilio.com/.../Messages.json`). `log` adapter
+  available for development. `setSenderForTests(s)` seam.
+- **`server/src/notifications/index.js`** — `notifyVisitEvent(event, { visit, actor })`
+  dispatcher routes to email + SMS with per-channel event filtering. Loads
+  the host fresh from the DB to pick up email + phone, skips channels the
+  host has no contact for, errors logged not propagated. Async wrapper
+  `notifyVisitEventAsync` for fire-and-forget dispatch.
+- **Visit-lifecycle wiring** — `services/visits.js` now fires `signed_in` on
+  create, `signed_out` on visitor self-sign-out, `force_signed_out` on
+  admin/security force sign-out (with the actor passed through so the email
+  body names the person who signed them out).
+- **Test endpoints** — `POST /api/settings/email/test` and
+  `POST /api/settings/sms/test` (admin only). Returns 400 when the channel
+  is disabled, 200 with delivery status otherwise. Useful for validating
+  SMTP / Twilio config without faking a visit.
+- **Settings page** gains an Email + SMS test panel each, with a recipient
+  input and inline ok/error feedback (mirrors cambiar's email-test pattern).
+
+### Internal
+- 76 → 91 vitest server tests covering: signed_in / signed_out / force_signed_out
+  routing, per-channel events filter, host-without-contact short-circuit,
+  channel-disabled short-circuit, force-sign-out body names actor, both
+  test endpoints (success + 400 + non-admin refused).
+- Notifications dispatcher uses fake email transport + fake SMS sender via
+  the new test seams; tests don't touch the network.
+
 ## [0.2.0] — 2026-05-06
 
 The kiosk does what it says on the tin. Visitors sign in at the iPad, the

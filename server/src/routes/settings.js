@@ -84,4 +84,48 @@ router.delete('/branding/logo', requireRole('admin'), (_req, res) => {
   res.json(getBranding());
 });
 
+// --- Notification test endpoints (admin only) -----------------------------
+
+const testEmailSchema = z.object({ to: z.string().email() }).strict();
+router.post('/email/test', requireRole('admin'), async (req, res) => {
+  const parse = testEmailSchema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: 'invalid request', details: parse.error.flatten() });
+
+  const { sendEmail, emailEnabled } = await import('../notifications/email.js');
+  if (!emailEnabled()) {
+    return res.status(400).json({ ok: false, error: 'email channel is disabled in config/notifications.json' });
+  }
+  try {
+    await sendEmail({
+      to: parse.data.to,
+      subject: '[visitas.world] Test email',
+      text: 'This is a test email from visitas.world. If you got this, your SMTP configuration is working.',
+      html: '<p>This is a test email from <strong>visitas.world</strong>.</p><p>If you got this, your SMTP configuration is working.</p>',
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+const testSmsSchema = z.object({ to: z.string().min(3).max(32) }).strict();
+router.post('/sms/test', requireRole('admin'), async (req, res) => {
+  const parse = testSmsSchema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: 'invalid request', details: parse.error.flatten() });
+
+  const { sendSms, smsEnabled } = await import('../notifications/sms.js');
+  if (!smsEnabled()) {
+    return res.status(400).json({ ok: false, error: 'sms channel is disabled in config/notifications.json' });
+  }
+  try {
+    await sendSms({
+      to: parse.data.to,
+      body: '[visitas.world] Test SMS — if you got this, your SMS adapter is working.',
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 export default router;

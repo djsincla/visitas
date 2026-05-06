@@ -56,6 +56,8 @@ export default function Settings() {
       <h1>Settings</h1>
       {err && <div className="error">{err}</div>}
 
+      <NotificationTester />
+
       <div className="panel">
         <h2>Branding</h2>
         <p className="muted">Shown in the topbar, on the kiosk welcome screen, on the login screen, and (in v0.4) on the printable badge.</p>
@@ -84,5 +86,70 @@ export default function Settings() {
         </form>
       </div>
     </>
+  );
+}
+
+function NotificationTester() {
+  return (
+    <>
+      <TestPanel
+        title="Email"
+        helpText="Sends a real email through your configured SMTP transport. Use it to verify config/notifications.json and the SMTP_PASSWORD env var. Disabled until email.enabled=true in the config."
+        endpoint="/api/settings/email/test"
+        recipientLabel="Test recipient"
+        recipientType="email"
+        recipientPlaceholder="you@your-workshop.com"
+      />
+      <TestPanel
+        title="SMS"
+        helpText="Sends a real SMS through your configured Twilio adapter. Use it to verify the accountSid + SMS_AUTH_TOKEN. Disabled until sms.enabled=true in the config."
+        endpoint="/api/settings/sms/test"
+        recipientLabel="Test recipient (E.164)"
+        recipientType="tel"
+        recipientPlaceholder="+15555550100"
+      />
+    </>
+  );
+}
+
+function TestPanel({ title, helpText, endpoint, recipientLabel, recipientType, recipientPlaceholder }) {
+  const [to, setTo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const onSend = async (e) => {
+    e.preventDefault();
+    setResult(null); setBusy(true);
+    try {
+      await api.post(endpoint, { to });
+      setResult({ ok: true, message: `Sent. Check ${to}.` });
+    } catch (e) {
+      setResult({ ok: false, message: e.data?.error || e.message });
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="panel">
+      <h2>{title}</h2>
+      <div className="muted" style={{ marginBottom: 8 }}>{helpText}</div>
+      <form onSubmit={onSend} className="row" style={{ gap: 8, alignItems: 'flex-end' }}>
+        <div style={{ flex: 1 }}>
+          <label>{recipientLabel}</label>
+          <input
+            type={recipientType}
+            value={to}
+            onChange={e => setTo(e.target.value)}
+            placeholder={recipientPlaceholder}
+            required
+          />
+        </div>
+        <button type="submit" disabled={busy || !to}>{busy ? 'Sending…' : `Send test ${title.toLowerCase()}`}</button>
+      </form>
+      {result && (
+        <div style={{ marginTop: 8, color: result.ok ? 'var(--success)' : 'var(--danger)' }}>
+          {result.message}
+        </div>
+      )}
+    </div>
   );
 }

@@ -1,5 +1,6 @@
 import { db } from '../db/index.js';
 import { recordAudit } from './audit.js';
+import { notifyVisitEventAsync } from '../notifications/index.js';
 
 const ACTIVE_SQL = `
   SELECT v.*, u.username AS host_username, u.display_name AS host_display_name
@@ -32,7 +33,9 @@ export function createVisit({ visitorName, company = null, email = null, phone =
     subjectId: visitId,
     details: { hostUserId, source: 'kiosk' },
   });
-  return getById(visitId);
+  const visit = getById(visitId);
+  notifyVisitEventAsync('signed_in', { visit });
+  return visit;
 }
 
 export function signOutVisit({ visitId, byUserId = null, method }) {
@@ -56,7 +59,13 @@ export function signOutVisit({ visitId, byUserId = null, method }) {
     subjectId: visitId,
     details: { method },
   });
-  return getById(visitId);
+  const visit = getById(visitId);
+  let actor = null;
+  if (byUserId) {
+    actor = db.prepare('SELECT id, username, display_name, role FROM users WHERE id = ?').get(byUserId);
+  }
+  notifyVisitEventAsync(method === 'admin' ? 'force_signed_out' : 'signed_out', { visit, actor });
+  return visit;
 }
 
 export function getById(visitId) {

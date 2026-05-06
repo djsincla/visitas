@@ -1,0 +1,27 @@
+{
+  "$comment": "v0.3 — host notifications. Both channels disabled by default. Set enabled=true and fill in transport-specific fields. Secrets (SMTP_PASSWORD, SMS_AUTH_TOKEN) come from env, never from this file. Edit and restart the container to apply.",
+
+  "email": {
+    "enabled": false,
+    "from": "visitas.world <hello@visitas.world>",
+    "smtp": {
+      "host": "smtp.example.com",
+      "port": 587,
+      "secure": false,
+      "user": "visitas@example.com"
+    },
+    "events": ["signed_in"],
+    "$comment": "events[] filters which transitions trigger an email. Options: 'signed_in' (visitor arrived; host gets pinged), 'signed_out' (visitor signed themselves out), 'force_signed_out' (admin or security force-signed-out). Default ships only signed_in."
+  },
+
+  "sms": {
+    "enabled": false,
+    "adapter": "twilio",
+    "twilio": {
+      "accountSid": "",
+      "fromNumber": "+15555555555"
+    },
+    "events": ["signed_in"],
+    "$comment": "Twilio adapter uses a direct REST call — no SDK required. Add a new adapter and dispatch on cfg.adapter to plug another provider. The 'log' adapter just logs without sending."
+  }
+}

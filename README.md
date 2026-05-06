@@ -10,7 +10,7 @@ For a higher-level overview of what the project is, who it's for, and what it de
 
 ## Status
 
-**v0.2 — kiosk sign-in works.** Visitors sign in at `/kiosk`, sign out at `/kiosk/signout`, the active-visitors admin page lets reception see who's on-site (with force sign-out for end-of-day cleanup), and a public wall view at `/active` is reachable without auth for fire-drill / hallway-monitor scenarios. Two roles: `admin` (host + full admin UI) and `security` (active-visitors page + force sign-out only). Host notifications, badge printing, NDA capture, photo capture, pre-registration, and AD lookup all land in v0.3 onwards. See [CHANGELOG.md](CHANGELOG.md).
+**v0.3 — host notifications.** v0.2's kiosk plus: hosts get pinged when their visitor arrives, via email (SMTP / nodemailer) and SMS (Twilio REST). Both channels off by default; flip the flag in `config/notifications.json` and supply secrets via env. Settings page has test buttons for both. Badge printing, NDA capture, photo capture, pre-registration, and AD lookup all land in v0.4 onwards. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Contents
 
@@ -147,7 +147,32 @@ Admin → **Settings** → upload PNG / SVG / JPEG / WebP (max 1 MB). The logo r
 
 The app name (default `visitas.world`) shown in the topbar when no logo is set is also editable on this page.
 
-## API reference (v0.2)
+## Email and SMS
+
+In `config/notifications.json` (mounted into the container read-only at `/app/config/`):
+
+```json
+{
+  "email": {
+    "enabled": true,
+    "from": "visitas.world <hello@your-workshop.com>",
+    "smtp": { "host": "smtp.example.com", "port": 587, "secure": false, "user": "visitas@example.com" },
+    "events": ["signed_in"]
+  },
+  "sms": {
+    "enabled": false,
+    "adapter": "twilio",
+    "twilio": { "accountSid": "ACxxx", "fromNumber": "+15555555555" },
+    "events": ["signed_in"]
+  }
+}
+```
+
+Secrets always come from env: `SMTP_PASSWORD`, `SMS_AUTH_TOKEN`. The `events[]` array filters which transitions fire that channel; supported events are `signed_in`, `signed_out`, `force_signed_out`. Per-host contact info is taken from the user record (admin can edit phone/email on the Users admin page).
+
+Restart the container after editing `config/notifications.json` to apply (`docker compose restart visitas`). Once up, use Settings → Email / SMS to send a test message and verify delivery.
+
+## API reference (v0.3)
 
 `GET /api` returns a live endpoint index.
 
@@ -175,6 +200,10 @@ The app name (default `visitas.world`) shown in the topbar when no logo is set i
 
 ### Hosts (kiosk typeahead) — `/api/hosts`
 - `GET /` — **public, sanitized** — `{ hosts: [{ id, displayName }] }`. Filtered to active `role=admin` users (security users are not hosts). Used by the kiosk's host typeahead.
+
+### Notification test endpoints (admin)
+- `POST /api/settings/email/test` — `{ to }` → sends a test email through the configured SMTP. 400 if disabled.
+- `POST /api/settings/sms/test` — `{ to }` → sends a test SMS through the configured Twilio adapter. 400 if disabled.
 
 ### Settings — `/api/settings`
 - `GET /branding` — **public** (no auth) — `{ appName, logoUrl, version }`. Used by the login screen and kiosk.
