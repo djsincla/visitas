@@ -10,7 +10,7 @@ For a higher-level overview of what the project is, who it's for, and what it de
 
 ## Status
 
-**v0.8 — opt-in photo capture.** All major v0 features have shipped: kiosk sign-in, host notifications, multi-iPad with AirPrint badges, NDA + safety briefing acknowledgments with drawn signature, returning-visitor pre-fill with 1-year NDA cache, pre-registration via QR, and (this release) opt-in photo capture with 30-day retention. **AD lookup for hosts** lands in v0.9. See [CHANGELOG.md](CHANGELOG.md) for details, and the [project site](https://djsincla.github.io/visitas/) for the roadmap.
+**v0.9 — Active Directory host lookup.** v0 roadmap complete. Workshop staff in the configured AD group (`visitas-world`) can log in with their AD credentials and become hosts in the kiosk typeahead. AD is opt-in — flip `auth.ad.enabled` in `config/auth.json` and supply `AD_BIND_PASSWORD` via env. Local accounts continue to work; bootstrap admin always logs in even if AD is down. See [CHANGELOG.md](CHANGELOG.md) and the [project site](https://djsincla.github.io/visitas/).
 
 ## Contents
 
@@ -28,7 +28,8 @@ For a higher-level overview of what the project is, who it's for, and what it de
 - [NDA + safety briefing](#nda--safety-briefing)
 - [Pre-registration via QR](#pre-registration-via-qr)
 - [Photo capture (opt-in)](#photo-capture-opt-in)
-- [API reference (v0.8)](#api-reference-v08)
+- [Active Directory](#active-directory)
+- [API reference (v0.9)](#api-reference-v09)
 - [Development](#development)
 - [Testing](#testing)
 - [License](#license)
@@ -260,7 +261,44 @@ Enabled via **Admin → Settings → Photo capture** (default off; privacy is op
 
 **Camera access requires HTTPS** in production — see the [HTTPS for the kiosk](#https-for-the-kiosk-production) section above before flipping the toggle on a deployed iPad.
 
-## API reference (v0.8)
+## Active Directory
+
+AD is opt-in via `config/auth.json`. With `auth.ad.enabled = true` and the bind password supplied via the `AD_BIND_PASSWORD` env var, login attempts that don't match a local user fall through to LDAP:
+
+```json
+{
+  "local": { "enabled": true, "passwordMinLength": 10 },
+  "ad": {
+    "enabled": true,
+    "url": "ldaps://ad.example.com:636",
+    "bindDN": "cn=visitas-svc,ou=ServiceAccounts,dc=example,dc=com",
+    "searchBase": "ou=Users,dc=example,dc=com",
+    "searchFilter": "(&(objectCategory=person)(objectClass=user)(sAMAccountName={username}))",
+    "tlsRejectUnauthorized": true,
+    "allowedGroup": "visitas-world",
+    "attributes": { "username": "sAMAccountName", "email": "mail", "displayName": "displayName" }
+  }
+}
+```
+
+Restart visitas after editing the config. Per-deployment notes:
+
+- **`searchFilter`** uses `(&(objectCategory=person)(objectClass=user)…)` so machine / computer accounts are excluded — only human users in the workshop's AD can log in. Adjust if you're on OpenLDAP or FreeIPA (those use `uid={username}` instead of `sAMAccountName={username}`).
+- **`allowedGroup`** is a case-insensitive **substring** match against each `memberOf` DN. The default `visitas-world` matches `cn=Visitas-World,ou=Groups,dc=example,dc=com`. Empty / unset = any AD user can log in (rare; the workshop normally pins to a single group).
+- **`bindDN`** is a service account in AD with read access to the search base. The bind password lives in env (`AD_BIND_PASSWORD`), never in JSON.
+- **Local takes precedence**. If a local account and an AD account share a username, login uses the local account's password. The bootstrap admin (`admin/admin`) is always local — if AD is down or misconfigured, the workshop can still log in.
+
+### What an AD login does
+
+On first AD login, visitas creates a `users` row with `source='ad'`, `role='admin'`, no `password_hash`. Subsequent logins refresh `email` and `display_name` from the AD attributes. AD users **become hosts**: once they've logged in, they appear in the kiosk's host typeahead (`/api/hosts`).
+
+> **First-time visibility**: an AD user must log in once before they show up in the host typeahead. For workshops with a small admin team this is fine — each member signs in once on their first day. For larger orgs you can periodically run a sync script that walks the AD group; we don't ship one in v0 (open an issue if it's important).
+
+### Disabling local password change for AD users
+
+`POST /api/auth/change-password` refuses for `source='ad'` accounts (returns 400 with `"AD-authenticated users must change password in AD"`) — those accounts have no local password to change.
+
+## API reference (v0.9)
 
 `GET /api` returns a live endpoint index.
 

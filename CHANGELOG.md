@@ -4,6 +4,51 @@ All notable changes to visitas.world are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses semantic versioning.
 
+## [0.9.0] — 2026-05-06
+
+Active Directory lookup. Workshop staff in the configured AD group
+(`visitas-world`) can log in with their AD credentials and become hosts
+in the kiosk's typeahead. Off by default; flip `auth.ad.enabled` in
+`config/auth.json` and supply the bind password via the `AD_BIND_PASSWORD`
+env var. Local accounts still work — bootstrap admin keeps you unlocked
+even if AD is unreachable.
+
+This closes the v0 roadmap. All eight feature releases (kiosk + multi-iPad
++ host notifications + AirPrint badges + NDA/safety + visitor records +
+1-year NDA cache + pre-registration + photo capture + AD) are shipped.
+
+### Added
+- **`config/auth.json`** — full auth config now lives here. `local.enabled` +
+  `local.passwordMinLength`, plus the new `ad` block: `enabled`, `url`,
+  `bindDN`, `searchBase`, `searchFilter` (defaults to
+  `(&(objectCategory=person)(objectClass=user)(sAMAccountName={username}))`
+  to exclude machine accounts per the workshop's spec), `tlsRejectUnauthorized`,
+  `allowedGroup` (default `visitas-world`), `attributes`. Default ships
+  AD disabled.
+- **`server/src/auth/ad.js`** — `ldapts`-driven LDAP client. `authenticateAD`
+  does service-bind → search → user-rebind → group-allowlist check, returns
+  `{ username, email, displayName, groups[] }` or null. `userInAllowedGroup`
+  does case-insensitive substring match against `memberOf` DNs. Includes a
+  `setClientFactoryForTests` seam so tests don't need a real LDAP server.
+- **Login fallback to AD** — `routes/auth.js` tries local first (bootstrap
+  admin always works, local-takes-precedence on collisions), falls through
+  to AD when the local match fails or the user isn't local. AD users get an
+  upserted `users` row with `source='ad'`, `role='admin'`, no
+  `password_hash`, with `email` + `display_name` refreshed from AD on every
+  login.
+- **AD users in the host typeahead** — once an AD user has logged in once,
+  they appear in `/api/hosts` (active `role=admin` users), so they can be
+  selected as a host at the kiosk. New AD hires need to log in once to
+  register; the README documents this flow.
+
+### Internal
+- 173 → 182 vitest server tests covering: AD user in `visitas-world` group
+  succeeds + upserts as `source='ad'`, AD user not in group rejected,
+  returning AD user has email/displayName refreshed, AD disabled =
+  local-only, local-takes-precedence on username collision, bad AD
+  password (rebind fails) returns 401, AD-upserted user appears in
+  `/api/hosts` after login, `userInAllowedGroup` substring matching.
+
 ## [0.8.0] — 2026-05-06
 
 Photo capture (opt-in). When the workshop turns it on, the kiosk asks each
