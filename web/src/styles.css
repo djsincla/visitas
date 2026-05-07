@@ -96,6 +96,7 @@ tbody tr:hover { background: var(--panel-2); }
 .kiosk-brand { margin-bottom: 32px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .kiosk-brand img { max-height: 80px; max-width: 320px; object-fit: contain; }
 .kiosk-brand .kiosk-app-name { font-size: 28px; font-weight: 600; letter-spacing: 0.5px; }
+.kiosk-brand .kiosk-loc { font-size: 14px; }
 .kiosk-card {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -206,6 +207,7 @@ tbody tr:hover { background: var(--panel-2); }
 }
 .wall-name { font-weight: 600; }
 .wall-host { color: var(--muted); }
+.wall-kiosk { font-size: 0.9em; opacity: 0.8; }
 .wall-duration { color: var(--accent); font-variant-numeric: tabular-nums; }
 
 .wall-footer {

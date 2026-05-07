@@ -4,6 +4,7 @@ import { requireAuth, requireRole, blockIfPasswordChangeRequired } from '../midd
 import { COOKIE_NAME, verifyToken } from '../auth/jwt.js';
 import { db } from '../db/index.js';
 import { createVisit, signOutVisit, getById, listActive, listAll, sanitizeForWall } from '../services/visits.js';
+import { renderBadge } from '../services/badge.js';
 
 const router = Router();
 
@@ -15,6 +16,7 @@ const createSchema = z.object({
   hostUserId: z.number().int().positive(),
   purpose: z.string().max(256).nullable().optional(),
   fields: z.record(z.string(), z.any()).optional(),
+  kioskSlug: z.string().min(1).max(64).nullable().optional(),
 });
 
 // Public: the kiosk creates visits without auth. Trust-the-LAN.
@@ -30,21 +32,31 @@ router.post('/', (req, res, next) => {
       hostUserId: parse.data.hostUserId,
       purpose: parse.data.purpose ?? null,
       fields: parse.data.fields ?? {},
+      kioskSlug: parse.data.kioskSlug ?? null,
     });
     res.status(201).json({ visit: v });
   } catch (e) { next(e); }
 });
 
-// Public: the wall view at /active reads this. Sanitized — names + hosts +
-// signed-in timestamps only, no email/phone/purpose. Anyone on the LAN can read.
-router.get('/active', (_req, res) => {
-  const visits = listActive().map(sanitizeForWall);
+// Public, sanitized — wall view at /active. Filterable by kiosk slug for
+// per-entrance fire roster.
+router.get('/active', (req, res) => {
+  const kioskSlug = req.query.kiosk || null;
+  const visits = listActive({ kioskSlug }).map(sanitizeForWall);
   res.json({ visits, asOf: new Date().toISOString() });
+});
+
+// Printable badge — public (it's a single visit's printable HTML; no PII
+// risk beyond what the visitor just typed). Returns standalone HTML so the
+// kiosk can window.print() it after sign-in.
+router.get('/:id/badge', (req, res) => {
+  const v = getById(Number(req.params.id));
+  if (!v) return res.status(404).type('text/plain').send('visit not found');
+  res.type('text/html').send(renderBadge(v));
 });
 
 // Sign-out. Public when called without auth (visitor self-signs-out at kiosk),
 // admin/security when called with a valid session cookie (force sign-out).
-// We try to identify the caller from the cookie but don't require auth.
 router.post('/:id/sign-out', (req, res, next) => {
   const id = Number(req.params.id);
   const callerId = tryIdentifyUser(req);
@@ -67,7 +79,8 @@ router.use(requireAuth, blockIfPasswordChangeRequired, requireRole('admin', 'sec
 
 router.get('/', (req, res) => {
   const status = req.query.status || null;
-  res.json({ visits: listAll({ status, limit: 500 }) });
+  const kioskSlug = req.query.kiosk || null;
+  res.json({ visits: listAll({ status, kioskSlug, limit: 500 }) });
 });
 
 router.get('/:id', (req, res) => {

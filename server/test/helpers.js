@@ -14,11 +14,18 @@ export function getApp() {
  * Order matters because of FK constraints.
  */
 export function resetDb() {
+  // Visits and audit log first (FKs into users + kiosks). Settings + users
+  // get wiped. Kiosks are *configuration* like cambiar's change_types — the
+  // 'default' kiosk seeded on first migration is preserved across resets so
+  // tests don't have to re-seed each one. Tests that mutate kiosks should
+  // clean up after themselves.
   db.exec(`
     DELETE FROM visits;
     DELETE FROM audit_log;
     DELETE FROM settings;
     DELETE FROM users;
+    DELETE FROM kiosks WHERE slug != 'default';
+    UPDATE kiosks SET active = 1, default_printer_name = NULL, name = 'Reception' WHERE slug = 'default';
   `);
   db.exec(`DELETE FROM sqlite_sequence WHERE name IN ('users', 'audit_log', 'visits')`);
 

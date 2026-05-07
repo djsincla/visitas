@@ -43,7 +43,10 @@ export default function WallView() {
           {visits.map(v => (
             <li key={v.id} className="wall-item">
               <span className="wall-name">{v.visitorName}</span>
-              <span className="wall-host">visiting {v.hostName ?? '—'}</span>
+              <span className="wall-host">
+                visiting {v.hostName ?? '—'}
+                {v.kioskName ? <span className="wall-kiosk muted"> · {v.kioskName}</span> : null}
+              </span>
               <span className="wall-duration">{durationSince(v.signedInAt)}</span>
             </li>
           ))}

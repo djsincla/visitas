@@ -10,7 +10,7 @@ For a higher-level overview of what the project is, who it's for, and what it de
 
 ## Status
 
-**v0.3 — host notifications.** v0.2's kiosk plus: hosts get pinged when their visitor arrives, via email (SMTP / nodemailer) and SMS (Twilio REST). Both channels off by default; flip the flag in `config/notifications.json` and supply secrets via env. Settings page has test buttons for both. Badge printing, NDA capture, photo capture, pre-registration, and AD lookup all land in v0.4 onwards. See [CHANGELOG.md](CHANGELOG.md).
+**v0.4 — multi-iPad + AirPrint badges.** Each entrance has its own kiosk URL (`/kiosk/<slug>`); each kiosk records a default-printer-name hint that operators expect MDM to enforce at the iOS level. After a successful sign-in the kiosk auto-pops a printable AirPrint badge. Active visitors / wall view show which kiosk each visitor came in through, with optional per-kiosk filtering for fire drills with multiple muster points. NDA capture, photo capture, pre-registration, and AD lookup all land in v0.5 onwards. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Contents
 
@@ -172,7 +172,19 @@ Secrets always come from env: `SMTP_PASSWORD`, `SMS_AUTH_TOKEN`. The `events[]` 
 
 Restart the container after editing `config/notifications.json` to apply (`docker compose restart visitas`). Once up, use Settings → Email / SMS to send a test message and verify delivery.
 
-## API reference (v0.3)
+## Multi-iPad / kiosk identity
+
+Every iPad parks on `/kiosk/<slug>` (e.g. `/kiosk/reception`, `/kiosk/loading-dock`). Bookmark the kiosk URL on the iPad's home screen — the bookmark is the kiosk's identity. A `default` kiosk is seeded on first migration so single-iPad workshops can just hit `/kiosk` and it'll redirect.
+
+Manage kiosks at **Admin → Kiosks**. Each kiosk has:
+
+- a unique `slug` (lowercase, dashes — used in the URL);
+- a display `name` (shown on the kiosk header + the printable badge + active-visitors page);
+- an optional **default printer name** — a human-readable label shown on the kiosk's "thanks" screen and at the bottom of the printable badge. It's a hint, not enforcement: the actual AirPrint default printer per iPad is configured via MDM at the iOS level.
+
+Visit records carry `kiosk_id`, so the wall view and admin active-visitors page can filter by kiosk (`?kiosk=loading-dock` on `/active` or the admin endpoint), useful for fire drills with multiple muster points.
+
+## API reference (v0.4)
 
 `GET /api` returns a live endpoint index.
 
@@ -204,6 +216,16 @@ Restart the container after editing `config/notifications.json` to apply (`docke
 ### Notification test endpoints (admin)
 - `POST /api/settings/email/test` — `{ to }` → sends a test email through the configured SMTP. 400 if disabled.
 - `POST /api/settings/sms/test` — `{ to }` → sends a test SMS through the configured Twilio adapter. 400 if disabled.
+
+### Kiosks — `/api/kiosks`
+- `GET /:slug` — **public, sanitized** — `{ kiosk: { slug, name, defaultPrinterName } }`. The kiosk SPA reads this on load.
+- `GET /` — admin — full list incl. timestamps + active flag.
+- `POST /` (admin) — `{ slug, name, defaultPrinterName? }`. Slug is `[a-z0-9-]+`, unique.
+- `PATCH /:slug` (admin) — `{ name?, defaultPrinterName?, active? }`.
+- `DELETE /:slug` (admin) — soft-deactivate. Refuses on `default`.
+
+### Printable badge — `/api/visits/:id/badge`
+- `GET /` — **public** — standalone printable HTML, sized for 4×3 inch label, auto-fires `window.print()`.
 
 ### Settings — `/api/settings`
 - `GET /branding` — **public** (no auth) — `{ appName, logoUrl, version }`. Used by the login screen and kiosk.

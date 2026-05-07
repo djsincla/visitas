@@ -4,6 +4,74 @@ All notable changes to visitas.world are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses semantic versioning.
 
+## [0.4.0] — 2026-05-06
+
+Multi-iPad. Each entrance can have its own kiosk URL with its own display
+name and a default-printer-name hint, and the workshop can pin the actual
+AirPrint default per-iPad via MDM. Visit records carry which kiosk the
+visitor signed in at, so the wall view and audit log can answer "who's at
+the loading dock vs reception" — useful for fire drills with multiple
+muster points.
+
+Plus the long-promised AirPrint badge: after the visitor taps Sign in, the
+kiosk pops a printable badge in a side window and triggers `window.print()`,
+landing on whatever printer the iPad is bound to.
+
+### Added
+- **Kiosks** — first-class entity. Each iPad parks on `/kiosk/<slug>` (e.g.
+  `/kiosk/reception`, `/kiosk/loading-dock`). A `default` kiosk is seeded on
+  first migration so single-iPad deployments don't need any config; multi-iPad
+  workshops add new kiosks under Admin → **Kiosks**. Each kiosk records:
+  - `slug` (URL identifier)
+  - `name` (display, e.g. "Reception desk", "Loading dock")
+  - `defaultPrinterName` — human-readable label shown on the kiosk's "thanks"
+    screen and as a small hint at the bottom of the printable badge. The
+    actual AirPrint printer assignment is enforced by MDM at the iOS level;
+    this field documents the expectation for both visitors and operators.
+- **AirPrint-friendly printable badge** at `GET /api/visits/:id/badge`
+  (public). Standalone HTML sized for a 4×3 label (`@page size: 4in 3in`),
+  visitor name + company + host + date + kiosk, "expires end of day" footer,
+  and the configured printer hint at the bottom. Auto-fires `window.print()`
+  on load and exposes a manual reprint button.
+- **Kiosk auto-print** — after a successful sign-in, the kiosk opens the
+  badge URL in a popup window. iOS hands it to AirPrint without further
+  visitor interaction.
+- **Visit records carry `kiosk_id`** — the active-visitors admin page shows
+  a Kiosk column; the public wall view at `/active` shows kiosk per row and
+  accepts `?kiosk=<slug>` to filter to a single muster point.
+- **Admin Kiosks page** at `/admin/kiosks` — list/create/patch/deactivate
+  with inline editing. Refuses to deactivate the `default` kiosk
+  (prevents an empty-state lockout).
+- **Three role-driven Playwright specs** replace the previous surface-organized
+  ones (per the "tests should simulate local users" guidance):
+  - `e2e/role-admin.spec.js` — the full admin workflow (forced password
+    change, host + security user creation, kiosk config including a printer
+    name, Settings panels render).
+  - `e2e/role-security.spec.js` — bounded surface (no Users / Kiosks /
+    Settings nav, direct admin URLs redirect away, force-sign-out works).
+  - `e2e/role-visitor.spec.js` — visitor's actual flow at the kiosk
+    (welcome → form validation → sign-in → thanks with printer name and
+    badge URL → sign-out at /kiosk/signout → no longer on the wall).
+
+### Changed
+- `GET /api/visits/active` now accepts `?kiosk=<slug>` and returns
+  `kioskName + kioskSlug` per row in the sanitized payload.
+- `GET /api/visits` now accepts `?kiosk=<slug>` for the admin per-kiosk
+  filter.
+- Topbar hides "Kiosks" from security users (admin-only nav link).
+
+### Internal
+- Migration 003 adds the `kiosks` table (with the seeded `default` row),
+  rebuilds `visits` to add `kiosk_id` (nullable, FK), and back-fills
+  existing on-site visits to the `default` kiosk so historical rows
+  stay queryable.
+- Routes added: `routes/kiosks.js`. Service: `services/kiosks.js`.
+  Service: `services/badge.js` renders the printable HTML.
+- 109 → 109+ vitest server tests covering kiosk CRUD, slug uniqueness,
+  default-kiosk preservation, visit creation with kiosk slug, wall-view
+  filter by kiosk, badge endpoint (HTML, escaping, 404), public sanitized
+  reads, admin-only writes, security-role refusal on kiosk admin endpoints.
+
 ## [0.3.0] — 2026-05-06
 
 Hosts get pinged when their visitor arrives. Email via SMTP (nodemailer) and

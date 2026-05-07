@@ -1,20 +1,44 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useBranding } from '../branding.jsx';
 import { api } from '../api.js';
 
 const STANDARD_KEYS = new Set(['name', 'company', 'email', 'phone', 'host', 'purpose']);
 
 export default function Kiosk() {
+  const { slug = 'default' } = useParams();
   const { appName, logoUrl } = useBranding();
-  const [stage, setStage] = useState('form'); // 'form' | 'thanks'
+  const [stage, setStage] = useState('form');
   const [thankYouFor, setThankYouFor] = useState(null);
+
+  const kioskQ = useQuery({
+    queryKey: ['kiosk', slug],
+    queryFn: () => api.get(`/api/kiosks/${slug}`),
+    retry: false,
+  });
 
   const onSignedIn = (visit) => {
     setThankYouFor(visit);
     setStage('thanks');
+    // Open the printable badge in a new window so iOS / AirPrint picks it up.
+    // Falls back to a same-tab navigation if the popup is blocked.
+    const w = window.open(`/api/visits/${visit.id}/badge`, '_blank', 'noopener=yes,width=480,height=320');
+    if (!w) {
+      // Fallback: link in the success card lets the visitor open it themselves.
+    }
   };
+
+  if (kioskQ.isLoading) return <div className="kiosk-wrap"><div className="kiosk-card"><p className="muted">Loading…</p></div></div>;
+  if (kioskQ.error) return (
+    <div className="kiosk-wrap">
+      <div className="kiosk-card">
+        <h1>Unknown kiosk</h1>
+        <p>The kiosk identifier <code>{slug}</code> isn&rsquo;t configured. Ask an admin to set it up under Settings → Kiosks.</p>
+      </div>
+    </div>
+  );
+  const kiosk = kioskQ.data?.kiosk;
 
   return (
     <div className="kiosk-wrap">
@@ -22,11 +46,13 @@ export default function Kiosk() {
         {logoUrl
           ? <img src={logoUrl} alt={appName} />
           : <div className="kiosk-app-name">{appName}</div>}
+        <div className="kiosk-loc muted">{kiosk?.name}</div>
       </div>
-      {stage === 'form' && <SignInForm onDone={onSignedIn} />}
+      {stage === 'form' && <SignInForm kioskSlug={slug} onDone={onSignedIn} />}
       {stage === 'thanks' && (
         <ThankYou
           visit={thankYouFor}
+          kiosk={kiosk}
           onReset={() => { setStage('form'); setThankYouFor(null); }}
         />
       )}
@@ -34,7 +60,7 @@ export default function Kiosk() {
   );
 }
 
-function SignInForm({ onDone }) {
+function SignInForm({ kioskSlug, onDone }) {
   const formQ = useQuery({ queryKey: ['visitor-form'], queryFn: () => api.get('/api/visitor-form') });
   const hostsQ = useQuery({ queryKey: ['hosts'], queryFn: () => api.get('/api/hosts') });
   const [values, setValues] = useState({});
@@ -81,6 +107,7 @@ function SignInForm({ onDone }) {
       hostUserId: hostId,
       purpose: values.purpose?.trim() || null,
       fields: extra,
+      kioskSlug,
     };
 
     setBusy(true);
@@ -201,14 +228,16 @@ function HostPicker({ field, hosts, query, setQuery, hostId, setHostId }) {
   );
 }
 
-function ThankYou({ visit, onReset }) {
+function ThankYou({ visit, kiosk, onReset }) {
   const timer = useRef(null);
   useEffect(() => {
-    timer.current = setTimeout(onReset, 8000);
+    timer.current = setTimeout(onReset, 12000);
     return () => clearTimeout(timer.current);
   }, [onReset]);
 
   const hostName = visit?.host?.displayName || visit?.host?.username || 'your host';
+  const printerName = kiosk?.defaultPrinterName;
+  const badgeUrl = visit?.id ? `/api/visits/${visit.id}/badge` : null;
 
   return (
     <div className="kiosk-card">
@@ -216,6 +245,14 @@ function ThankYou({ visit, onReset }) {
       <p>
         We&rsquo;ve told <strong>{hostName}</strong> you&rsquo;re here. Please take a seat &mdash; they&rsquo;ll be with you shortly.
       </p>
+      {badgeUrl && (
+        <p>
+          Your badge is printing
+          {printerName ? <> to <strong>{printerName}</strong></> : null}.
+          {' '}
+          <a href={badgeUrl} target="_blank" rel="noopener noreferrer">Reprint badge</a>.
+        </p>
+      )}
       <button onClick={onReset} className="secondary">Done</button>
       <div className="kiosk-stub">Returning to the welcome screen automatically…</div>
     </div>

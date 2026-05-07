@@ -10,6 +10,7 @@ import Kiosk from './pages/Kiosk.jsx';
 import KioskSignOut from './pages/KioskSignOut.jsx';
 import ActiveVisitors from './pages/ActiveVisitors.jsx';
 import WallView from './pages/WallView.jsx';
+import Kiosks from './pages/Kiosks.jsx';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -17,10 +18,10 @@ export default function App() {
   if (loading) return <div className="login-wrap">Loading…</div>;
 
   if (!user) {
-    // Public surfaces: kiosk (visitor sign-in/out) and the wall view.
     return (
       <Routes>
-        <Route path="/kiosk" element={<Kiosk />} />
+        <Route path="/kiosk/:slug" element={<Kiosk />} />
+        <Route path="/kiosk" element={<Navigate to="/kiosk/default" replace />} />
         <Route path="/kiosk/signout" element={<KioskSignOut />} />
         <Route path="/active" element={<WallView />} />
         <Route path="/login" element={<Login />} />
@@ -29,7 +30,6 @@ export default function App() {
     );
   }
 
-  const isAdmin = user.role === 'admin';
   const isSecurity = user.role === 'security';
   const home = isSecurity ? '/admin/active-visitors' : '/admin/users';
 
@@ -38,18 +38,18 @@ export default function App() {
       {!user.mustChangePassword && <TopBar />}
       <main>
         <Routes>
-          <Route path="/kiosk" element={<Kiosk />} />
+          <Route path="/kiosk/:slug" element={<Kiosk />} />
+          <Route path="/kiosk" element={<Navigate to="/kiosk/default" replace />} />
           <Route path="/kiosk/signout" element={<KioskSignOut />} />
           <Route path="/active" element={<WallView />} />
           <Route path="/login" element={<Navigate to={home} replace />} />
           <Route path="/change-password" element={<ChangePassword forced={user.mustChangePassword} />} />
           <Route path="/" element={<Protected><Navigate to={home} replace /></Protected>} />
 
-          {/* Admin or security */}
           <Route path="/admin/active-visitors" element={<Protected role="any-staff"><ActiveVisitors /></Protected>} />
 
-          {/* Admin only */}
           <Route path="/admin/users" element={<Protected role="admin"><Users /></Protected>} />
+          <Route path="/admin/kiosks" element={<Protected role="admin"><Kiosks /></Protected>} />
           <Route path="/admin/settings" element={<Protected role="admin"><Settings /></Protected>} />
 
           <Route path="*" element={<Navigate to={home} replace />} />
@@ -88,8 +88,8 @@ function TopBar() {
         {isAdmin && (
           <>
             <NavLink to="/admin/users" className={({ isActive }) => isActive ? 'active' : ''}>Users</NavLink>
+            <NavLink to="/admin/kiosks" className={({ isActive }) => isActive ? 'active' : ''}>Kiosks</NavLink>
             <NavLink to="/admin/settings" className={({ isActive }) => isActive ? 'active' : ''}>Settings</NavLink>
-            <NavLink to="/kiosk" className={({ isActive }) => isActive ? 'active' : ''}>Kiosk</NavLink>
           </>
         )}
       </nav>

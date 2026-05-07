@@ -43,6 +43,7 @@ export default function ActiveVisitors() {
                 <th>Name</th>
                 <th>Company</th>
                 <th>Host</th>
+                <th>Kiosk</th>
                 <th>Purpose</th>
                 <th>Signed in</th>
                 <th>On site</th>
@@ -55,6 +56,7 @@ export default function ActiveVisitors() {
                   <td>{v.visitorName}</td>
                   <td>{v.company || <span className="muted">—</span>}</td>
                   <td>{v.host?.displayName || v.host?.username || <span className="muted">—</span>}</td>
+                  <td>{v.kiosk?.name || <span className="muted">—</span>}</td>
                   <td>{v.purpose || <span className="muted">—</span>}</td>
                   <td title={v.signedInAt}>{formatTime(v.signedInAt)}</td>
                   <td>{durationSince(v.signedInAt)}</td>
