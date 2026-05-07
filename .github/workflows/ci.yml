@@ -10,6 +10,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Force the runner to execute JS-based actions on Node 24 instead of the
+# default Node 20 runtime. The action *versions* (checkout/setup-node/
+# upload-artifact @v5) still ship Node 20 internally — only the action
+# authors can change that. This env flag opts us into Node 24 now, which
+# silences the deprecation warning. Once Node 24 is the runner default
+# (June 2026) this can be removed.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   test:
     runs-on: ubuntu-latest
