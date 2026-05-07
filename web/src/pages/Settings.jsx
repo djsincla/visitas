@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useBranding } from '../branding.jsx';
+import { useTheme } from '../theme.jsx';
 import { api } from '../api.js';
 
 export default function Settings() {
@@ -56,6 +57,8 @@ export default function Settings() {
       <h1>Settings</h1>
       {err && <div className="error">{err}</div>}
 
+      <ThemePicker />
+
       <NotificationTester />
 
       <div className="panel">
@@ -86,6 +89,41 @@ export default function Settings() {
         </form>
       </div>
     </>
+  );
+}
+
+function ThemePicker() {
+  const { choice, applied, setChoice } = useTheme();
+  const options = [
+    { value: 'light', label: 'Light' },
+    { value: 'dark',  label: 'Dark' },
+    { value: 'auto',  label: 'Auto (follow system)' },
+  ];
+  return (
+    <div className="panel">
+      <h2>Theme</h2>
+      <div className="muted" style={{ marginBottom: 8 }}>
+        Saved per-browser. <strong>Auto</strong> follows your OS&rsquo;s light/dark preference and updates live when you switch.
+        The sun / moon icon in the topbar is a quick toggle for whoever&rsquo;s logged in.
+      </div>
+      <div className="theme-picker">
+        {options.map(o => (
+          <label key={o.value} className={`theme-option ${choice === o.value ? 'selected' : ''}`}>
+            <input
+              type="radio"
+              name="theme-choice"
+              value={o.value}
+              checked={choice === o.value}
+              onChange={() => setChoice(o.value)}
+            />
+            <span>{o.label}</span>
+            {o.value === 'auto' && choice === 'auto' && (
+              <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>currently {applied}</span>
+            )}
+          </label>
+        ))}
+      </div>
+    </div>
   );
 }
 

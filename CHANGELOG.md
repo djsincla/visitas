@@ -4,6 +4,26 @@ All notable changes to visitas.world are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses semantic versioning.
 
+## [0.5.1] — 2026-05-06
+
+Theme top-up. Adds an explicit Light / Dark / **Auto (follow system)**
+picker to the Settings page; the existing topbar sun / moon icon still
+works as a quick toggle. Auto mode reads `prefers-color-scheme` and updates
+live when the OS preference changes.
+
+### Added
+- **Settings → Theme** card with three options: Light, Dark, Auto. Selection
+  persists per-browser (localStorage `visitas-theme`).
+- ThemeProvider now exposes `{ choice, applied, setChoice, toggle }` —
+  `choice` is what the user picked (incl. `'auto'`), `applied` is what the
+  document is actually rendering as.
+- `prefers-color-scheme` listener so Auto mode tracks OS-level light/dark
+  changes without a page reload.
+
+### Changed
+- The topbar icon button now uses `applied` (not `choice`) for its label
+  so the swap-to-the-other-one feel is consistent in Auto mode.
+
 ## [0.5.0] — 2026-05-06
 
 NDA + safety briefing acknowledgments. Visitor must scroll to the bottom of

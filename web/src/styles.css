@@ -217,6 +217,52 @@ tbody tr:hover { background: var(--panel-2); }
   font-size: 13px;
 }
 
+/* Kiosk doc panel (NDA + safety screens) */
+.kiosk-card.kiosk-doc { max-width: 720px; text-align: left; }
+.kiosk-card.kiosk-doc h2 { font-size: 22px; margin: 0 0 4px; }
+.doc-body {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  max-height: 320px;
+  overflow-y: auto;
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Signature pad */
+.signature-pad-wrap { margin-top: 8px; }
+.signature-pad {
+  display: block;
+  width: 100%;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.signature-pad.disabled { opacity: 0.5; cursor: not-allowed; }
+.signature-pad-actions { margin-top: 6px; display: flex; align-items: center; gap: 12px; }
+
+/* Theme picker on Settings */
+.theme-picker { display: flex; flex-direction: column; gap: 8px; max-width: 360px; }
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  background: var(--panel-2);
+}
+.theme-option:hover { background: var(--panel); }
+.theme-option.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+.theme-option input { width: auto; margin: 0; }
+
+/* Stepper indicator on the kiosk */
+.kiosk-brand .kiosk-stepper { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+
 /* ---------------------------------------------------------------- */
 /* Responsive: tablet                                               */
 /* ---------------------------------------------------------------- */

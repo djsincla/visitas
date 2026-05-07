@@ -71,7 +71,7 @@ function Protected({ children, role = 'any-staff' }) {
 function TopBar() {
   const { user, logout } = useAuth();
   const { appName, logoUrl, version } = useBranding();
-  const { theme, toggle: toggleTheme } = useTheme();
+  const { applied: theme, toggle: toggleTheme } = useTheme();
   const nav = useNavigate();
 
   const isAdmin = user.role === 'admin';
