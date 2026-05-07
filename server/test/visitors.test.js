@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach } from 'vitest';
-import { resetDb, createUser, client, row, rows } from './helpers.js';
+import { resetDb, createUser, agentFor, client, adminAgent, row, rows } from './helpers.js';
 import { saveDocument } from '../src/services/documents.js';
 import { findOrCreateByEmail, findByEmail, computeNdaCache } from '../src/services/visitors.js';
 import { db } from '../src/db/index.js';
@@ -207,5 +207,53 @@ describe('Visit creation uses 1-year NDA cache', () => {
     });
     expect(res.status).toBe(201);
     expect(res.body.visit.visitor).toBeNull();
+  });
+});
+
+describe('GET /api/visitors (admin)', () => {
+  beforeEach(resetDb);
+
+  test('admin sees the list with counts + cache status', async () => {
+    saveDocument({ kind: 'nda', title: 'NDA', body: 'V1' });
+    const host = createUser({ username: 'h', role: 'admin' });
+    const TINY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+
+    await client().post('/api/visits').send({
+      visitorName: 'Alice', email: 'alice@x.com', hostUserId: host.id,
+      acknowledgments: [{ kind: 'nda', signedName: 'Alice', signaturePngBase64: TINY_PNG }],
+    });
+    await client().post('/api/visits').send({
+      visitorName: 'Alice', email: 'alice@x.com', hostUserId: host.id,
+    }); // returning, NDA cache hit
+    await client().post('/api/visits').send({
+      visitorName: 'Bob', email: 'bob@x.com', hostUserId: host.id,
+      acknowledgments: [{ kind: 'nda', signedName: 'Bob', signaturePngBase64: TINY_PNG }],
+    });
+
+    const a = await adminAgent();
+    const res = await a.get('/api/visitors');
+    expect(res.status).toBe(200);
+    expect(res.body.visitors).toHaveLength(2);
+
+    const alice = res.body.visitors.find(v => v.email === 'alice@x.com');
+    expect(alice.visitCount).toBe(2);
+    expect(alice.ndaCacheFresh).toBe(true);
+    expect(alice.ndaCacheVersion).toBe(1);
+
+    const bob = res.body.visitors.find(v => v.email === 'bob@x.com');
+    expect(bob.visitCount).toBe(1);
+    expect(bob.ndaCacheFresh).toBe(true);
+  });
+
+  test('non-admin (security) refused', async () => {
+    createUser({ username: 'guard', password: 'GuardPass123', role: 'security' });
+    const a = await agentFor('guard', 'GuardPass123');
+    const res = await a.get('/api/visitors');
+    expect(res.status).toBe(403);
+  });
+
+  test('unauthed refused', async () => {
+    const res = await client().get('/api/visitors');
+    expect(res.status).toBe(401);
   });
 });

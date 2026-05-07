@@ -4,6 +4,24 @@ All notable changes to visitas.world are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses semantic versioning.
 
+## [0.6.1] — 2026-05-06
+
+Admin Visitors page. Every visitor the kiosk has ever signed in is listed
+with derived visit count + NDA cache status, sorted most-recent-first.
+Useful before v0.7's pre-registration flow lands; also a faster way to
+spot a visitor whose NDA needs re-signing because the version bumped.
+
+### Added
+- `GET /api/visitors` (admin) — list every visitor with name, email,
+  company, phone, first/last seen, visit count, and NDA cache status
+  (`ndaCacheFresh`, `ndaCacheVersion`, `ndaCacheAcknowledgedAt`).
+- `services/visitors.js > listForAdmin` — sorted by `last_seen_at` DESC,
+  derives counts via correlated subquery, computes NDA cache per row.
+- `/admin/visitors` web page with topbar nav link (admin only).
+  Relative-time "last seen" display.
+- 145 → 148 vitest server tests covering the admin list endpoint
+  (auth required, security refused, derived counts + cache flags).
+
 ## [0.6.0] — 2026-05-06
 
 Returning visitors don't have to start over. Visitors are now first-class

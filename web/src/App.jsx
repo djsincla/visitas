@@ -12,6 +12,7 @@ import ActiveVisitors from './pages/ActiveVisitors.jsx';
 import WallView from './pages/WallView.jsx';
 import Kiosks from './pages/Kiosks.jsx';
 import Documents from './pages/Documents.jsx';
+import Visitors from './pages/Visitors.jsx';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="/admin/users" element={<Protected role="admin"><Users /></Protected>} />
           <Route path="/admin/kiosks" element={<Protected role="admin"><Kiosks /></Protected>} />
           <Route path="/admin/documents" element={<Protected role="admin"><Documents /></Protected>} />
+          <Route path="/admin/visitors" element={<Protected role="admin"><Visitors /></Protected>} />
           <Route path="/admin/settings" element={<Protected role="admin"><Settings /></Protected>} />
 
           <Route path="*" element={<Navigate to={home} replace />} />
@@ -89,6 +91,7 @@ function TopBar() {
         </NavLink>
         {isAdmin && (
           <>
+            <NavLink to="/admin/visitors" className={({ isActive }) => isActive ? 'active' : ''}>Visitors</NavLink>
             <NavLink to="/admin/users" className={({ isActive }) => isActive ? 'active' : ''}>Users</NavLink>
             <NavLink to="/admin/kiosks" className={({ isActive }) => isActive ? 'active' : ''}>Kiosks</NavLink>
             <NavLink to="/admin/documents" className={({ isActive }) => isActive ? 'active' : ''}>Documents</NavLink>

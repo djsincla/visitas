@@ -103,3 +103,31 @@ function rowToVisitor(r) {
     lastSeenAt: r.last_seen_at,
   };
 }
+
+/**
+ * Admin list view — every visitor we've ever seen with derived counts
+ * and NDA cache status. Sorted most-recent-first.
+ */
+export function listForAdmin({ limit = 500 } = {}) {
+  const rows = db.prepare(`
+    SELECT v.*,
+           (SELECT COUNT(*) FROM visits WHERE visitor_id = v.id) AS visit_count,
+           (SELECT MAX(signed_in_at) FROM visits WHERE visitor_id = v.id) AS most_recent_visit_at
+    FROM visitors v
+    ORDER BY datetime(v.last_seen_at) DESC
+    LIMIT ?
+  `).all(limit);
+
+  return rows.map(r => {
+    const visitor = rowToVisitor(r);
+    const cache = computeNdaCache(r.id);
+    return {
+      ...visitor,
+      visitCount: r.visit_count,
+      mostRecentVisitAt: r.most_recent_visit_at,
+      ndaCacheFresh: cache.fresh,
+      ndaCacheVersion: cache.version ?? null,
+      ndaCacheAcknowledgedAt: cache.acknowledgedAt ?? null,
+    };
+  });
+}
