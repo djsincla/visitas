@@ -2,10 +2,12 @@ import { config } from './config.js';
 import { logger } from './logger.js';
 import { runMigrations, bootstrapAdmin, seedDocumentsFromConfig } from './db/migrate.js';
 import { createApp } from './app.js';
+import { startPhotoRetentionSweep } from './services/photo.js';
 
 runMigrations();
 bootstrapAdmin();
 seedDocumentsFromConfig();
+startPhotoRetentionSweep();
 
 const app = createApp();
 const server = app.listen(config.port, () => {

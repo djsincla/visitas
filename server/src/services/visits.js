@@ -6,6 +6,7 @@ import { recordAcknowledgment, loadAcknowledgmentsForVisit } from './visitAcknow
 import { sendVisitorNdaCopy } from '../notifications/visitorNda.js';
 import { findOrCreateByEmail, computeNdaCache } from './visitors.js';
 import { getByToken as getInvitation, markUsed as markInvitationUsed } from './invitations.js';
+import { storePhoto, photoEnabled } from './photo.js';
 
 const VISIT_SQL = `
   SELECT v.*,
@@ -22,7 +23,7 @@ const VISIT_SQL = `
 export function createVisit({
   visitorName, company = null, email = null, phone = null,
   hostUserId, purpose = null, fields = {}, kioskSlug = null,
-  acknowledgments = [], inviteToken = null,
+  acknowledgments = [], inviteToken = null, photoPngBase64 = null,
 }) {
   let invitation = null;
   if (inviteToken) {
@@ -116,6 +117,12 @@ export function createVisit({
 
   if (invitation) {
     markInvitationUsed({ token: inviteToken, visitId });
+  }
+
+  // Photo capture (opt-in via settings.photo.enabled). Silently ignore
+  // photoPngBase64 when the channel is disabled.
+  if (photoEnabled() && photoPngBase64) {
+    try { storePhoto({ visitId, photoPngBase64 }); } catch {}
   }
 
   recordAudit({
@@ -238,6 +245,7 @@ function rowToVisit(r) {
       id: r.visitor_id,
       email: r.visitor_email,
     } : null,
+    photoPath: r.photo_path ?? null,
     purpose: r.purpose,
     fields: r.fields_json ? JSON.parse(r.fields_json) : {},
     status: r.status,

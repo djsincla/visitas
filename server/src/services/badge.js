@@ -19,6 +19,7 @@ export function renderBadge(visit) {
     : null;
   const appName = escapeHtml(branding.appName || 'visitas.world');
   const logoUrl = branding.logoUrl ? escapeHtml(branding.logoUrl) : null;
+  const photoUrl = visit.photoPath ? `/api/visits/${visit.id}/photo` : null;
 
   return `<!doctype html>
 <html lang="en">
@@ -52,6 +53,7 @@ export function renderBadge(visit) {
     .header img { max-height: 14mm; max-width: 32mm; object-fit: contain; }
     .header .app { font-size: 11pt; font-weight: 600; letter-spacing: 0.3px; }
     .visitor { font-size: 22pt; font-weight: 700; line-height: 1.1; margin: 4mm 0 0; }
+    .photo { float: right; width: 28mm; height: 28mm; object-fit: cover; border: 1px solid #ddd; margin: 0 0 0 4mm; }
     .company { font-size: 11pt; color: #555; margin-top: 1mm; }
     .meta { font-size: 9pt; color: #444; }
     .meta .label { display: inline-block; min-width: 16mm; color: #888; }
@@ -99,6 +101,7 @@ export function renderBadge(visit) {
       ${logoUrl ? `<img src="${logoUrl}" alt="${appName}" />` : `<div class="app">${appName}</div>`}
     </div>
     <div>
+      ${photoUrl ? `<img class="photo" src="${photoUrl}" alt="" />` : ''}
       <div class="visitor">${visitorName}</div>
       ${company ? `<div class="company">${company}</div>` : ''}
     </div>

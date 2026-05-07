@@ -5,6 +5,7 @@ import { COOKIE_NAME, verifyToken } from '../auth/jwt.js';
 import { db } from '../db/index.js';
 import { createVisit, signOutVisit, getById, listActive, listAll, sanitizeForWall } from '../services/visits.js';
 import { renderBadge } from '../services/badge.js';
+import { photoFileFor } from '../services/photo.js';
 
 const router = Router();
 
@@ -28,6 +29,8 @@ const createSchema = z.object({
   kioskSlug: z.string().min(1).max(64).nullable().optional(),
   acknowledgments: z.array(ackSchema).optional(),
   inviteToken: z.string().min(8).max(128).nullable().optional(),
+  // PNG data URL or raw base64. 5 MB cap (a 1200x800 visitor photo is well under that).
+  photoPngBase64: z.string().max(5_000_000).nullable().optional(),
 }).refine(
   (data) => data.hostUserId || data.inviteToken,
   { message: 'hostUserId or inviteToken required' },
@@ -49,6 +52,7 @@ router.post('/', (req, res, next) => {
       kioskSlug: parse.data.kioskSlug ?? null,
       acknowledgments: parse.data.acknowledgments ?? [],
       inviteToken: parse.data.inviteToken ?? null,
+      photoPngBase64: parse.data.photoPngBase64 ?? null,
     });
     res.status(201).json({ visit: v });
   } catch (e) { next(e); }
@@ -69,6 +73,14 @@ router.get('/:id/badge', (req, res) => {
   const v = getById(Number(req.params.id));
   if (!v) return res.status(404).type('text/plain').send('visit not found');
   res.type('text/html').send(renderBadge(v));
+});
+
+// Public photo endpoint. Returns the PNG file when present, 404 when the
+// retention sweep has purged it (>30 days old) or no photo was captured.
+router.get('/:id/photo', (req, res) => {
+  const file = photoFileFor(Number(req.params.id));
+  if (!file) return res.status(404).type('text/plain').send('photo not available');
+  res.type('image/png').sendFile(file);
 });
 
 // Sign-out. Public when called without auth (visitor self-signs-out at kiosk),

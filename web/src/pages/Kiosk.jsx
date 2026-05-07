@@ -4,6 +4,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useBranding } from '../branding.jsx';
 import { api } from '../api.js';
 import SignaturePad from '../components/SignaturePad.jsx';
+import PhotoCapture from '../components/PhotoCapture.jsx';
 
 const STANDARD_KEYS = new Set(['name', 'company', 'email', 'phone', 'host', 'purpose']);
 
@@ -15,6 +16,7 @@ export default function Kiosk() {
   const [stage, setStage] = useState('form');
   const [pending, setPending] = useState(null);
   const [acks, setAcks] = useState([]);
+  const [photoPng, setPhotoPng] = useState(null);
   const [thankYouFor, setThankYouFor] = useState(null);
   const [submitErr, setSubmitErr] = useState(null);
   const [ndaCacheFresh, setNdaCacheFresh] = useState(false);
@@ -28,6 +30,10 @@ export default function Kiosk() {
     queryKey: ['documents-active'],
     queryFn: () => api.get('/api/documents/active'),
   });
+  const photoSettingQ = useQuery({
+    queryKey: ['settings-photo'],
+    queryFn: () => api.get('/api/settings/photo'),
+  });
   const inviteQ = useQuery({
     queryKey: ['invitation', inviteToken],
     queryFn: () => api.get(`/api/invitations/${inviteToken}`),
@@ -35,7 +41,7 @@ export default function Kiosk() {
     retry: false,
   });
 
-  if (kioskQ.isLoading || docsQ.isLoading || inviteQ.isLoading) {
+  if (kioskQ.isLoading || docsQ.isLoading || inviteQ.isLoading || photoSettingQ.isLoading) {
     return <div className="kiosk-wrap"><div className="kiosk-card"><p className="muted">Loading…</p></div></div>;
   }
   if (kioskQ.error) {
@@ -65,27 +71,45 @@ export default function Kiosk() {
   const safetyDoc = docs.find(d => d.kind === 'safety');
   const ndaDoc = docs.find(d => d.kind === 'nda');
   const invitation = inviteQ.data?.invitation ?? null;
+  const photoEnabled = !!photoSettingQ.data?.enabled;
 
-  // NDA stage is needed only if there's an active NDA AND the visitor's
-  // cache is stale. Server still re-validates on submit.
+  // Stage order: form → photo? → safety? → nda? → submit.
   const stagesNeeded = ['form'];
+  if (photoEnabled) stagesNeeded.push('photo');
   if (safetyDoc) stagesNeeded.push('safety');
   if (ndaDoc && !ndaCacheFresh) stagesNeeded.push('nda');
+
+  const advanceFrom = (current, lookupInfo) => {
+    const idx = stagesNeeded.indexOf(current);
+    let next = stagesNeeded[idx + 1];
+    // The NDA stage is dynamically removed on cache hit — recompute.
+    if (next === 'nda' && lookupInfo?.ndaCacheFresh) next = stagesNeeded[idx + 2];
+    return next;
+  };
 
   const onFormDone = (body, lookupInfo) => {
     setPending(body);
     setAcks([]);
+    setPhotoPng(null);
     setNdaCacheFresh(!!lookupInfo?.ndaCacheFresh);
-    if (safetyDoc) setStage('safety');
-    else if (ndaDoc && !lookupInfo?.ndaCacheFresh) setStage('nda');
-    else submit(body, []);
+    const next = advanceFrom('form', lookupInfo);
+    if (next) setStage(next);
+    else submit(body, [], null);
+  };
+
+  const onPhotoDone = (png) => {
+    setPhotoPng(png);
+    const next = advanceFrom('photo');
+    if (next) setStage(next);
+    else submit(pending, acks, png);
   };
 
   const onSafetyDone = () => {
     const updated = [...acks, { kind: 'safety', signedName: pending.visitorName }];
     setAcks(updated);
-    if (ndaDoc && !ndaCacheFresh) setStage('nda');
-    else submit(pending, updated);
+    const next = advanceFrom('safety');
+    if (next) setStage(next);
+    else submit(pending, updated, photoPng);
   };
 
   const onNdaDone = (signaturePngBase64) => {
@@ -95,16 +119,17 @@ export default function Kiosk() {
       signaturePngBase64,
     }];
     setAcks(updated);
-    submit(pending, updated);
+    submit(pending, updated, photoPng);
   };
 
-  const submit = async (body, ackList) => {
+  const submit = async (body, ackList, photo) => {
     setSubmitErr(null);
     try {
       const r = await api.post('/api/visits', {
         ...body,
         acknowledgments: ackList,
         inviteToken: inviteToken ?? undefined,
+        photoPngBase64: photo ?? undefined,
       });
       setThankYouFor({ ...r.visit, _ndaCacheFresh: ndaCacheFresh });
       setStage('thanks');
@@ -116,8 +141,8 @@ export default function Kiosk() {
   };
 
   const onReset = () => {
-    setStage('form'); setPending(null); setAcks([]); setThankYouFor(null);
-    setSubmitErr(null); setNdaCacheFresh(false);
+    setStage('form'); setPending(null); setAcks([]); setPhotoPng(null);
+    setThankYouFor(null); setSubmitErr(null); setNdaCacheFresh(false);
   };
 
   return (
@@ -134,6 +159,9 @@ export default function Kiosk() {
         )}
       </div>
       {stage === 'form' && <SignInForm kioskSlug={slug} initialErr={submitErr} invitation={invitation} onDone={onFormDone} />}
+      {stage === 'photo' && (
+        <PhotoStage onDone={onPhotoDone} />
+      )}
       {stage === 'safety' && safetyDoc && (
         <DocumentAck doc={safetyDoc} confirmLabel="I have read this — continue" onDone={onSafetyDone} />
       )}
@@ -385,6 +413,18 @@ function ScrollableBody({ doc, onReachedBottom }) {
       </div>
       {!reached && <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>↑ Scroll to the bottom to continue.</div>}
     </>
+  );
+}
+
+function PhotoStage({ onDone }) {
+  return (
+    <div className="kiosk-card kiosk-photo">
+      <h2 style={{ margin: 0 }}>Quick photo</h2>
+      <p className="muted" style={{ margin: '4px 0 12px', fontSize: 14 }}>
+        We&rsquo;ll take a photo for your visitor badge. Stand in front of the iPad and tap the button.
+      </p>
+      <PhotoCapture onChange={(png) => { if (png) onDone(png); }} />
+    </div>
   );
 }
 

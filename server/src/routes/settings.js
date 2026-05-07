@@ -84,6 +84,21 @@ router.delete('/branding/logo', requireRole('admin'), (_req, res) => {
   res.json(getBranding());
 });
 
+// --- Photo capture toggle (admin only) ------------------------------------
+
+const photoSchema = z.object({ enabled: z.boolean() }).strict();
+
+router.get('/photo', (_req, res) => {
+  res.json({ enabled: Boolean(getSetting('photo.enabled')) });
+});
+
+router.put('/photo', requireRole('admin'), (req, res) => {
+  const parse = photoSchema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: 'invalid request', details: parse.error.flatten() });
+  setSetting('photo.enabled', parse.data.enabled);
+  res.json({ enabled: parse.data.enabled });
+});
+
 // --- Notification test endpoints (admin only) -----------------------------
 
 const testEmailSchema = z.object({ to: z.string().email() }).strict();

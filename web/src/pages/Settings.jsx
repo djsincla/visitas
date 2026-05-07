@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useBranding } from '../branding.jsx';
 import { useTheme } from '../theme.jsx';
 import { api } from '../api.js';
@@ -58,6 +59,8 @@ export default function Settings() {
       {err && <div className="error">{err}</div>}
 
       <ThemePicker />
+
+      <PhotoCaptureToggle />
 
       <NotificationTester />
 
@@ -123,6 +126,46 @@ function ThemePicker() {
           </label>
         ))}
       </div>
+    </div>
+  );
+}
+
+function PhotoCaptureToggle() {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ['settings-photo'],
+    queryFn: () => api.get('/api/settings/photo'),
+  });
+  const enabled = !!data?.enabled;
+
+  const m = useMutation({
+    mutationFn: (next) => fetch('/api/settings/photo', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: next }),
+    }).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings-photo'] }),
+  });
+
+  return (
+    <div className="panel">
+      <h2>Photo capture</h2>
+      <div className="muted" style={{ marginBottom: 8 }}>
+        Visitors take a photo with the iPad&rsquo;s front camera at sign-in. The photo prints on their badge and is
+        stored against the visit record for <strong>30 days</strong>, then auto-purged. Off by default — privacy is opt-in.
+        Camera access requires HTTPS in production (browsers block it on plain http for non-localhost origins);
+        plan your TLS cert before enabling on a deployed iPad.
+      </div>
+      <label className="theme-option" style={{ display: 'flex', alignItems: 'center', gap: 10, maxWidth: 360 }}>
+        <input
+          type="checkbox"
+          checked={enabled}
+          disabled={isLoading || m.isPending}
+          onChange={(e) => m.mutate(e.target.checked)}
+        />
+        <span>{enabled ? 'Enabled' : 'Disabled'}</span>
+      </label>
     </div>
   );
 }

@@ -4,6 +4,45 @@ All notable changes to visitas.world are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses semantic versioning.
 
+## [0.8.0] — 2026-05-06
+
+Photo capture (opt-in). When the workshop turns it on, the kiosk asks each
+visitor for a photo via the iPad's front camera; the photo prints on the
+badge and is retained against the visit record for 30 days, then auto-purged.
+Off by default — privacy is opt-in.
+
+### Added
+- **Migration 007** adds `visits.photo_path` (nullable, relative path under
+  `data/`) via the same table-rebuild pattern as 002/003/005. Includes a
+  partial index `(signed_in_at) WHERE photo_path IS NOT NULL` so the
+  retention sweep is cheap.
+- **`services/photo.js`** — `storePhoto({visitId, photoPngBase64})` writes
+  to `data/photos/visit-{id}.png`, `photoFileFor(visitId)` resolves the
+  on-disk path (or null after purge), `purgeExpiredPhotos()` deletes files
+  older than 30d + nulls the column, `startPhotoRetentionSweep()` runs the
+  purge once on startup and then every 24 h.
+- **`POST /api/visits` accepts `photoPngBase64`** (5 MB cap, opt-in gated by
+  `settings.photo.enabled` — silently ignored when disabled).
+- **`GET /api/visits/:id/photo`** (public) serves the PNG when present, 404
+  otherwise (after purge or for visits where no photo was captured).
+- **Badge template** includes the photo as a 28×28 mm right-floated image
+  on the badge when present.
+- **Settings → Photo capture** toggle (admin only). Defaults off; clear
+  copy on retention + HTTPS-or-localhost requirement for camera access.
+- **Kiosk Photo stage** — `<PhotoCapture>` component using `getUserMedia`
+  with the front-facing camera, mirrored preview (so the captured image
+  matches what the visitor sees), Take photo / Retake / Use this photo
+  flow. Inserted between form and safety briefing in the multi-stage flow
+  when `settings.photo.enabled`.
+
+### Internal
+- 164 → 173 vitest server tests covering: opt-in gating (disabled = ignored,
+  enabled = stored), file written to disk, public endpoint returns the PNG,
+  404 when missing, retention sweep deletes >30d files + nulls column,
+  retention sweep keeps fresh visits, admin-only toggle, security-role refused.
+- `index.js` boot sequence now also calls `startPhotoRetentionSweep()` so
+  long-running deployments stay within the 30-day window without a cron.
+
 ## [0.7.0] — 2026-05-06
 
 Pre-registration. Hosts pre-book expected visitors via the new Invitations
