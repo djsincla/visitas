@@ -30,6 +30,11 @@ test('security: cannot reach admin URLs by typing them', async ({ page }) => {
   await page.getByLabel('Password').fill('GuardNewPass1234');
   await page.getByRole('button', { name: /Sign in/ }).click();
 
+  // Wait for the post-login topbar to confirm the session cookie landed
+  // before we start hitting protected URLs — otherwise the goto can race
+  // ahead of the Set-Cookie response and the SPA shows /login again.
+  await expect(page.getByRole('link', { name: 'Active visitors' })).toBeVisible();
+
   // Direct nav to /admin/users redirects to /admin/active-visitors.
   await page.goto('/admin/users');
   await expect(page.getByRole('heading', { name: 'Active visitors' })).toBeVisible();
