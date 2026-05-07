@@ -42,14 +42,31 @@ test('security: cannot reach admin URLs by typing them', async ({ page }) => {
 });
 
 test('security: force-signs-out a visitor', async ({ page, context }) => {
-  // Sign in a visitor first via the public kiosk surface.
+  // Sign in a visitor first via the public kiosk surface. v0.7+ flow is
+  // multi-stage: form → safety → NDA + signature → submit. We block the
+  // print popup so it doesn't open a stray tab.
   const kiosk = await context.newPage();
+  await kiosk.addInitScript(() => { window.open = () => null; });
   await kiosk.goto('/kiosk/default');
   await kiosk.getByLabel(/Your name/).fill('Walk-In Wanda');
   await kiosk.getByPlaceholder(/Type a name…/).fill('Jane');
   await kiosk.getByRole('button', { name: 'Jane Host' }).click();
   await kiosk.getByLabel(/Reason for visit/).selectOption('Meeting');
-  await kiosk.getByRole('button', { name: 'Sign in' }).click();
+  await kiosk.getByRole('button', { name: 'Continue' }).click();
+
+  // Safety briefing (active from the admin spec).
+  await kiosk.locator('.doc-body').first().evaluate(el => { el.scrollTop = el.scrollHeight; });
+  await kiosk.getByRole('button', { name: /I have read this/ }).click();
+
+  // NDA + drawn signature (also active from admin spec).
+  await kiosk.locator('.doc-body').first().evaluate(el => { el.scrollTop = el.scrollHeight; });
+  const pad = kiosk.locator('canvas.signature-pad');
+  const padBox = await pad.boundingBox();
+  await kiosk.mouse.move(padBox.x + 20, padBox.y + 20);
+  await kiosk.mouse.down();
+  await kiosk.mouse.move(padBox.x + 200, padBox.y + 100, { steps: 10 });
+  await kiosk.mouse.up();
+  await kiosk.getByRole('button', { name: /I agree and sign/ }).click();
   await expect(kiosk.getByRole('heading', { name: /Thanks/ })).toBeVisible();
 
   // Now log in as guard.

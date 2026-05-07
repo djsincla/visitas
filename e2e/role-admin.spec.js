@@ -60,7 +60,7 @@ test('admin: creates an admin host and a security user', async ({ page }) => {
   await page.getByLabel(/Initial password/).fill('JanePass12345');
   await page.getByLabel(/Display name/).fill('Jane Host');
   await page.getByRole('button', { name: 'Create user' }).click();
-  await expect(page.getByRole('cell', { name: 'jane' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'jane', exact: true })).toBeVisible();
 
   // Create a security user.
   await page.getByRole('button', { name: '+ Add user' }).click();
@@ -69,7 +69,7 @@ test('admin: creates an admin host and a security user', async ({ page }) => {
   await page.getByLabel(/Initial password/).fill('GuardPass1234');
   await page.getByLabel(/Display name/).fill('Guard One');
   await page.getByRole('button', { name: 'Create user' }).click();
-  await expect(page.getByRole('cell', { name: 'guard' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'guard', exact: true })).toBeVisible();
 });
 
 test('admin: configures kiosks (default + loading dock with printer)', async ({ page }) => {
