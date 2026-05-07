@@ -10,19 +10,25 @@ For a higher-level overview of what the project is, who it's for, and what it de
 
 ## Status
 
-**v0.4 — multi-iPad + AirPrint badges.** Each entrance has its own kiosk URL (`/kiosk/<slug>`); each kiosk records a default-printer-name hint that operators expect MDM to enforce at the iOS level. After a successful sign-in the kiosk auto-pops a printable AirPrint badge. Active visitors / wall view show which kiosk each visitor came in through, with optional per-kiosk filtering for fire drills with multiple muster points. NDA capture, photo capture, pre-registration, and AD lookup all land in v0.5 onwards. See [CHANGELOG.md](CHANGELOG.md).
+**v0.8 — opt-in photo capture.** All major v0 features have shipped: kiosk sign-in, host notifications, multi-iPad with AirPrint badges, NDA + safety briefing acknowledgments with drawn signature, returning-visitor pre-fill with 1-year NDA cache, pre-registration via QR, and (this release) opt-in photo capture with 30-day retention. **AD lookup for hosts** lands in v0.9. See [CHANGELOG.md](CHANGELOG.md) for details, and the [project site](https://djsincla.github.io/visitas/) for the roadmap.
 
 ## Contents
 
 - [Quick start (Docker)](#quick-start-docker)
 - [Quick start (local development)](#quick-start-local-development)
+- [HTTPS for the kiosk (production)](#https-for-the-kiosk-production)
 - [Default credentials](#default-credentials)
 - [Resetting the admin password](#resetting-the-admin-password)
 - [Repo layout](#repo-layout)
 - [Configuration](#configuration)
 - [Visitor form schema](#visitor-form-schema)
 - [Branding (logo + app name)](#branding-logo--app-name)
-- [API reference (v0.1)](#api-reference-v01)
+- [Email and SMS](#email-and-sms)
+- [Multi-iPad / kiosk identity](#multi-ipad--kiosk-identity)
+- [NDA + safety briefing](#nda--safety-briefing)
+- [Pre-registration via QR](#pre-registration-via-qr)
+- [Photo capture (opt-in)](#photo-capture-opt-in)
+- [API reference (v0.8)](#api-reference-v08)
 - [Development](#development)
 - [Testing](#testing)
 - [License](#license)
@@ -58,6 +64,49 @@ npm start                                # serves API + built web on :3000
 ```
 
 The Vite dev server proxies `/api/*` and `/uploads/*` to the server, so a single `http://localhost:5173` URL works for development.
+
+## HTTPS for the kiosk (production)
+
+The kiosk's photo capture (v0.8+) uses the browser's `getUserMedia` API, which **requires an HTTPS origin** — browsers block camera access on plain `http://` for everything except `localhost`. If you don't enable photo capture you can run on `http://` indefinitely and skip this section, but the moment you flip the toggle in Settings → Photo capture you'll need TLS terminating in front of the container.
+
+Three pragmatic options for a small workshop:
+
+### Option A — Caddy reverse proxy (recommended)
+
+[Caddy](https://caddyserver.com) terminates TLS automatically — Let's Encrypt for an internet-reachable hostname, or its own internal CA for a LAN-only deploy. One-line config:
+
+```caddyfile
+visitas.workshop.local {
+    reverse_proxy visitas:3000
+    tls internal
+}
+```
+
+Run Caddy alongside visitas in `docker-compose.yml`. iPads need the Caddy local CA root trusted once via an iOS configuration profile — Caddy serves it at `https://your-host/auto/`. After that, `https://visitas.workshop.local` works on every iPad on the LAN, including camera permission prompts.
+
+For an internet-reachable hostname, replace `tls internal` with nothing — Caddy auto-provisions a real Let's Encrypt cert.
+
+### Option B — mkcert for LAN-only
+
+If you don't want a reverse proxy, [mkcert](https://github.com/FiloSottile/mkcert) generates locally-trusted certs:
+
+```bash
+mkcert -install                                  # adds the root CA to your trust store
+mkcert visitas.workshop.local 192.168.1.42       # generate cert + key for the LAN address
+# move .pem files into ./certs/, point your TLS-terminating proxy at them
+```
+
+Each iPad needs the mkcert root CA installed once via a configuration profile (export with `mkcert -CAROOT` and email or AirDrop the `rootCA.pem` to the device). After install + trust, the cert is valid on iOS and the camera prompt works.
+
+### Option C — A proper cert from a real CA
+
+If the workshop hostname is reachable from the public internet (e.g. `visitas.example.com`), use Let's Encrypt directly via [acme.sh](https://github.com/acmesh-official/acme.sh) or your existing infra. Drop the cert + key into the same TLS-terminating proxy as A or B.
+
+### Wiring it into docker-compose
+
+`docker-compose.yml` ships with the visitas container exposed on `:3000` directly. For production with TLS, run a Caddy / nginx / Traefik service alongside that points at the visitas container's internal port and binds `:443` on the host. The visitas service itself doesn't terminate TLS — it serves plain HTTP behind the proxy. Set `BASE_URL=https://your-host` in `.env` so links in invitation emails use the right scheme.
+
+> **MDM note**: if your iPads are managed (via Apple Business Manager / Jamf / similar), push the root CA as a configuration profile rather than relying on visitors trusting it manually — same flow as for any internal service.
 
 ## Default credentials
 
@@ -184,7 +233,34 @@ Manage kiosks at **Admin → Kiosks**. Each kiosk has:
 
 Visit records carry `kiosk_id`, so the wall view and admin active-visitors page can filter by kiosk (`?kiosk=loading-dock` on `/active` or the admin endpoint), useful for fire drills with multiple muster points.
 
-## API reference (v0.4)
+## NDA + safety briefing
+
+Both are optional documents managed under **Admin → Documents**. Save the body of each (the textareas pre-fill with sensible defaults the first time); each save bumps the active version. Visitors must scroll to the bottom of the body before the acknowledge / sign button activates. The NDA additionally requires a drawn signature on a `<canvas>` (works for finger / stylus / mouse).
+
+Acknowledgments are recorded against the visit:
+
+- `data/signatures/visit-{id}-nda.png` — the drawn signature (kept indefinitely, this is the audit record).
+- `visit_acknowledgments` table — one row per (visit, document) acknowledgment, with `document_version`, `signed_name`, `acknowledged_at`.
+
+If the email channel is enabled (`config/notifications.json`) and the visitor provided an email, the kiosk also emails them a copy of the signed NDA — HTML body with the agreement text + their signature embedded as a CID inline image.
+
+**1-year NDA cache** (v0.6+): if the same visitor (matched by email) acknowledged the *current* active NDA version in the last 365 days, the kiosk skips the NDA step on this visit. New version of the NDA = everyone re-signs.
+
+## Pre-registration via QR
+
+Hosts pre-book visitors under **Admin → Invitations**. Each invitation gets a random 32-hex token + a kiosk URL with the token in the query string (`?invite=<token>`). If the email channel is enabled, visitas mails the visitor an HTML email with the kiosk URL plus an inline QR code of the same URL. Single-use, 7-day expiry by default; admins can also copy the link manually if email is off.
+
+On arrival the visitor opens the link (or scans the QR with their iPhone camera, which opens the URL in Safari). The kiosk reads the token, pre-fills name / company / email / phone, **locks the host** to the pre-booked one, and shows a "You were expected" banner. Submit marks the invitation `used` and links it to the new visit; the audit row records `details.invitationId` + `details.source: 'invitation'`.
+
+## Photo capture (opt-in)
+
+Enabled via **Admin → Settings → Photo capture** (default off; privacy is opt-in). When on, the kiosk inserts a Photo stage between the form and the safety briefing — front-facing camera preview, Take photo / Retake / Use this photo flow. The photo prints on the badge as a 28×28 mm right-floated image and is stored at `data/photos/visit-{id}.png`.
+
+**Retention**: photos are auto-purged 30 days after sign-in by a sweep that runs on server boot and every 24 hours after. Visit rows stay (audit), but `photo_path` gets nulled and the file deleted. Adjust the constant in `server/src/services/photo.js` if your jurisdiction requires a different window.
+
+**Camera access requires HTTPS** in production — see the [HTTPS for the kiosk](#https-for-the-kiosk-production) section above before flipping the toggle on a deployed iPad.
+
+## API reference (v0.8)
 
 `GET /api` returns a live endpoint index.
 
@@ -217,6 +293,10 @@ Visit records carry `kiosk_id`, so the wall view and admin active-visitors page 
 - `POST /api/settings/email/test` — `{ to }` → sends a test email through the configured SMTP. 400 if disabled.
 - `POST /api/settings/sms/test` — `{ to }` → sends a test SMS through the configured Twilio adapter. 400 if disabled.
 
+### Photo toggle — `/api/settings/photo`
+- `GET /` — `{ enabled }`.
+- `PUT /` (admin) — `{ enabled: bool }` to flip the photo-capture channel on/off.
+
 ### Kiosks — `/api/kiosks`
 - `GET /:slug` — **public, sanitized** — `{ kiosk: { slug, name, defaultPrinterName } }`. The kiosk SPA reads this on load.
 - `GET /` — admin — full list incl. timestamps + active flag.
@@ -225,7 +305,33 @@ Visit records carry `kiosk_id`, so the wall view and admin active-visitors page 
 - `DELETE /:slug` (admin) — soft-deactivate. Refuses on `default`.
 
 ### Printable badge — `/api/visits/:id/badge`
-- `GET /` — **public** — standalone printable HTML, sized for 4×3 inch label, auto-fires `window.print()`.
+- `GET /` — **public** — standalone printable HTML, sized for 4×3 inch label, auto-fires `window.print()`. Includes the visitor's photo when present.
+
+### Photo — `/api/visits/:id/photo`
+- `GET /` — **public** — serves the captured PNG when present (returns 404 after the 30-day retention sweep purges it, or for visits where no photo was captured).
+
+### Documents — `/api/documents`
+- `GET /active` — **public, sanitized** — `{ documents: [{ id, kind, version, title, body }] }`. Used by the kiosk to render NDA + safety screens.
+- `GET /` (admin) — full version history, optionally `?kind=nda|safety`.
+- `POST /` (admin) — `{ kind, title, body }`. Each save bumps the version (no-op if title + body unchanged).
+- `DELETE /:kind` (admin) — deactivate the active document of that kind.
+
+### Visitors — `/api/visitors`
+- `POST /lookup` — **public** — `{email}` → returning-visitor pre-fill payload (name / company / phone / `ndaCacheFresh` / `ndaCacheVersion`). 404 on unknown email.
+- `GET /` (admin) — list every visitor with derived visit count + NDA cache state.
+
+### Invitations — `/api/invitations`
+- `GET /:token` — **public, sanitized** — kiosk reads invitation by token. 410 for `used` / `cancelled` / `expired`.
+- `GET /` (admin) — list with optional `?status=`.
+- `POST /` (admin) — `{ visitorName, email, hostUserId, kioskSlug?, expectedAt?, purpose?, expiryDays? }`. Sends email best-effort (with QR), returns the invitation including `token`.
+- `POST /:id/resend` (admin) — re-fires the email.
+- `DELETE /:id` (admin) — cancel.
+
+### Visit creation extensions — `/api/visits`
+The base `POST /api/visits` accepts these additional optional fields:
+- `acknowledgments[]: [{kind, signedName?, signaturePngBase64?}]` — one entry per active document. NDA additionally requires a non-empty signature. Server enforces; missing required ack returns 400. (See [NDA + safety](#nda--safety-briefing).)
+- `inviteToken` — locks host (and kiosk if pinned) to the invitation, marks it `used` on success. (See [Pre-registration](#pre-registration-via-qr).)
+- `photoPngBase64` — captured visitor photo. Silently ignored when `settings.photo.enabled = false`. Capped at 5 MB. (See [Photo capture](#photo-capture-opt-in).)
 
 ### Settings — `/api/settings`
 - `GET /branding` — **public** (no auth) — `{ appName, logoUrl, version }`. Used by the login screen and kiosk.
