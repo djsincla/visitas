@@ -83,8 +83,9 @@
   <p class="muted" style="margin-bottom: 16px;">
     The project is shipping in small honest steps. Done so far:
     scaffold, kiosk sign-in, host notifications, multi-iPad with AirPrint
-    badges. NDA + safety acknowledgments are landing now; visitor records,
-    pre-registration, photo capture, and AD lookup follow.
+    badges, NDA + safety acknowledgments with drawn signature, returning-visitor
+    pre-fill with 1-year NDA cache, pre-registration via QR, and opt-in
+    photo capture with 30-day retention. AD lookup is next.
   </p>
 
   <div class="grid">
@@ -161,16 +162,18 @@
         with a QR code. They scan the QR at the kiosk to claim the booking
         and skip the form fields they&rsquo;re already on file for.
       </p>
-      <p class="muted">Where you are now.</p>
+      <p class="muted">Shipped.</p>
     </article>
 
     <article>
       <h3>v0.8 — photo capture</h3>
       <p>
-        The iPad's front camera captures a visitor photo at sign-in. It
+        The iPad&rsquo;s front camera captures a visitor photo at sign-in. It
         prints on the badge and is retained for 30 days against the visit
-        record, then auto-purged by a daily sweep.
+        record, then auto-purged by a daily sweep. Off by default — privacy
+        is opt-in.
       </p>
+      <p class="muted">Shipped.</p>
     </article>
 
     <article>
@@ -181,6 +184,7 @@
         if <code>LDAP_*</code> env vars are set the host list pulls from AD,
         otherwise local-only.
       </p>
+      <p class="muted">Where you are now.</p>
     </article>
 
     <article>
