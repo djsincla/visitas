@@ -21,12 +21,17 @@ const createSchema = z.object({
   company: z.string().max(128).nullable().optional(),
   email: z.string().email().nullable().optional(),
   phone: z.string().max(32).nullable().optional(),
-  hostUserId: z.number().int().positive(),
+  // hostUserId is optional when inviteToken is supplied (server locks host to the invitation).
+  hostUserId: z.number().int().positive().optional(),
   purpose: z.string().max(256).nullable().optional(),
   fields: z.record(z.string(), z.any()).optional(),
   kioskSlug: z.string().min(1).max(64).nullable().optional(),
   acknowledgments: z.array(ackSchema).optional(),
-});
+  inviteToken: z.string().min(8).max(128).nullable().optional(),
+}).refine(
+  (data) => data.hostUserId || data.inviteToken,
+  { message: 'hostUserId or inviteToken required' },
+);
 
 // Public: the kiosk creates visits without auth. Trust-the-LAN.
 router.post('/', (req, res, next) => {
@@ -43,6 +48,7 @@ router.post('/', (req, res, next) => {
       fields: parse.data.fields ?? {},
       kioskSlug: parse.data.kioskSlug ?? null,
       acknowledgments: parse.data.acknowledgments ?? [],
+      inviteToken: parse.data.inviteToken ?? null,
     });
     res.status(201).json({ visit: v });
   } catch (e) { next(e); }

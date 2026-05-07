@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useBranding } from '../branding.jsx';
 import { api } from '../api.js';
 import SignaturePad from '../components/SignaturePad.jsx';
@@ -9,6 +9,8 @@ const STANDARD_KEYS = new Set(['name', 'company', 'email', 'phone', 'host', 'pur
 
 export default function Kiosk() {
   const { slug = 'default' } = useParams();
+  const [searchParams] = useSearchParams();
+  const inviteToken = searchParams.get('invite');
   const { appName, logoUrl } = useBranding();
   const [stage, setStage] = useState('form');
   const [pending, setPending] = useState(null);
@@ -26,8 +28,14 @@ export default function Kiosk() {
     queryKey: ['documents-active'],
     queryFn: () => api.get('/api/documents/active'),
   });
+  const inviteQ = useQuery({
+    queryKey: ['invitation', inviteToken],
+    queryFn: () => api.get(`/api/invitations/${inviteToken}`),
+    enabled: !!inviteToken,
+    retry: false,
+  });
 
-  if (kioskQ.isLoading || docsQ.isLoading) {
+  if (kioskQ.isLoading || docsQ.isLoading || inviteQ.isLoading) {
     return <div className="kiosk-wrap"><div className="kiosk-card"><p className="muted">Loading…</p></div></div>;
   }
   if (kioskQ.error) {
@@ -40,10 +48,23 @@ export default function Kiosk() {
       </div>
     );
   }
+  // Invitation-with-error: friendly fallback (expired / used / cancelled / unknown).
+  if (inviteToken && inviteQ.error) {
+    return (
+      <div className="kiosk-wrap">
+        <div className="kiosk-card">
+          <h1>This invitation can&rsquo;t be used.</h1>
+          <p className="muted">It may have expired, already been claimed, or been cancelled. Please sign in normally below.</p>
+          <p><a href={`/kiosk/${slug}`}>Continue to sign-in →</a></p>
+        </div>
+      </div>
+    );
+  }
   const kiosk = kioskQ.data?.kiosk;
   const docs = docsQ.data?.documents ?? [];
   const safetyDoc = docs.find(d => d.kind === 'safety');
   const ndaDoc = docs.find(d => d.kind === 'nda');
+  const invitation = inviteQ.data?.invitation ?? null;
 
   // NDA stage is needed only if there's an active NDA AND the visitor's
   // cache is stale. Server still re-validates on submit.
@@ -80,7 +101,11 @@ export default function Kiosk() {
   const submit = async (body, ackList) => {
     setSubmitErr(null);
     try {
-      const r = await api.post('/api/visits', { ...body, acknowledgments: ackList });
+      const r = await api.post('/api/visits', {
+        ...body,
+        acknowledgments: ackList,
+        inviteToken: inviteToken ?? undefined,
+      });
       setThankYouFor({ ...r.visit, _ndaCacheFresh: ndaCacheFresh });
       setStage('thanks');
       window.open(`/api/visits/${r.visit.id}/badge`, '_blank', 'noopener=yes,width=480,height=320');
@@ -108,7 +133,7 @@ export default function Kiosk() {
           </div>
         )}
       </div>
-      {stage === 'form' && <SignInForm kioskSlug={slug} initialErr={submitErr} onDone={onFormDone} />}
+      {stage === 'form' && <SignInForm kioskSlug={slug} initialErr={submitErr} invitation={invitation} onDone={onFormDone} />}
       {stage === 'safety' && safetyDoc && (
         <DocumentAck doc={safetyDoc} confirmLabel="I have read this — continue" onDone={onSafetyDone} />
       )}
@@ -122,14 +147,17 @@ export default function Kiosk() {
   );
 }
 
-function SignInForm({ kioskSlug, initialErr, onDone }) {
+function SignInForm({ kioskSlug, initialErr, invitation, onDone }) {
   const formQ = useQuery({ queryKey: ['visitor-form'], queryFn: () => api.get('/api/visitor-form') });
-  const hostsQ = useQuery({ queryKey: ['hosts'], queryFn: () => api.get('/api/hosts') });
-  const [values, setValues] = useState({});
+  const hostsQ = useQuery({ queryKey: ['hosts'], queryFn: () => api.get('/api/hosts'), enabled: !invitation });
+  const [values, setValues] = useState(() => invitation
+    ? { name: invitation.visitorName, company: invitation.company || '', email: invitation.email || '', phone: invitation.phone || '', purpose: invitation.purpose || '' }
+    : {}
+  );
   const [hostQuery, setHostQuery] = useState('');
-  const [hostId, setHostId] = useState(null);
+  const [hostId, setHostId] = useState(invitation?.host?.id ?? null);
   const [err, setErr] = useState(initialErr);
-  const [lookup, setLookup] = useState(null); // { name, company, phone, ndaCacheFresh, ... } | null
+  const [lookup, setLookup] = useState(null);
   const [lookingUp, setLookingUp] = useState(false);
 
   if (formQ.isLoading || hostsQ.isLoading) {
@@ -173,7 +201,7 @@ function SignInForm({ kioskSlug, initialErr, onDone }) {
     for (const f of fields) {
       if (!f.required) continue;
       if (f.type === 'host-typeahead') {
-        if (!hostId) { setErr(`Please select your host.`); return; }
+        if (!hostId && !invitation) { setErr(`Please select your host.`); return; }
       } else if (!values[f.key] || String(values[f.key]).trim() === '') {
         setErr(`Please fill in: ${f.label}`); return;
       }
@@ -198,8 +226,14 @@ function SignInForm({ kioskSlug, initialErr, onDone }) {
 
   return (
     <form className="kiosk-card kiosk-form" onSubmit={onSubmit}>
-      <h1>Welcome.</h1>
-      <p>Sign in for your visit. We&rsquo;ll let your host know you&rsquo;re here.</p>
+      <h1>Welcome{invitation ? ', ' + (invitation.visitorName?.split(' ')[0] || 'visitor') : ''}.</h1>
+      {invitation && (
+        <div className="kiosk-welcomeback">
+          <strong>You were expected.</strong> {invitation.host?.displayName} is your host today
+          {invitation.expectedAt ? <>, expected at {invitation.expectedAt}</> : null}. Confirm your details below.
+        </div>
+      )}
+      {!invitation && <p>Sign in for your visit. We&rsquo;ll let your host know you&rsquo;re here.</p>}
 
       {lookup && (
         <div className="kiosk-welcomeback">
@@ -211,6 +245,18 @@ function SignInForm({ kioskSlug, initialErr, onDone }) {
 
       {fields.map(f => {
         if (f.type === 'host-typeahead') {
+          if (invitation) {
+            // Locked: visitor was pre-booked with this host.
+            return (
+              <div key={f.key} style={{ marginTop: 16 }}>
+                <label>{f.label}</label>
+                <div className="row" style={{ alignItems: 'center', justifyContent: 'space-between', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 10 }}>
+                  <span>{invitation.host?.displayName}</span>
+                  <span className="badge muted">pre-booked</span>
+                </div>
+              </div>
+            );
+          }
           return (
             <HostPicker
               key={f.key} field={f} hosts={hosts}
@@ -225,7 +271,7 @@ function SignInForm({ kioskSlug, initialErr, onDone }) {
             field={f}
             value={values[f.key] ?? ''}
             onChange={(v) => set(f.key, v)}
-            onBlur={f.key === 'email' ? onEmailBlur : undefined}
+            onBlur={f.key === 'email' && !invitation ? onEmailBlur : undefined}
           />
         );
       })}

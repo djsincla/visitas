@@ -5,6 +5,7 @@ import { getActive as getActiveDoc } from './documents.js';
 import { recordAcknowledgment, loadAcknowledgmentsForVisit } from './visitAcknowledgments.js';
 import { sendVisitorNdaCopy } from '../notifications/visitorNda.js';
 import { findOrCreateByEmail, computeNdaCache } from './visitors.js';
+import { getByToken as getInvitation, markUsed as markInvitationUsed } from './invitations.js';
 
 const VISIT_SQL = `
   SELECT v.*,
@@ -21,8 +22,18 @@ const VISIT_SQL = `
 export function createVisit({
   visitorName, company = null, email = null, phone = null,
   hostUserId, purpose = null, fields = {}, kioskSlug = null,
-  acknowledgments = [],
+  acknowledgments = [], inviteToken = null,
 }) {
+  let invitation = null;
+  if (inviteToken) {
+    invitation = getInvitation(inviteToken);
+    if (!invitation) throw httpError(404, 'invitation not found');
+    if (invitation.status !== 'sent') throw httpError(410, `invitation ${invitation.status}`);
+    hostUserId = invitation.host.id;
+    if (invitation.kiosk) kioskSlug = invitation.kiosk.slug;
+    if (!email) email = invitation.email;
+  }
+
   const host = db.prepare("SELECT id, role, active FROM users WHERE id = ?").get(hostUserId);
   if (!host) throw httpError(400, 'unknown host');
   if (host.role !== 'admin') throw httpError(400, 'host must be a host (role=admin), not a security user');
@@ -103,6 +114,10 @@ export function createVisit({
     if (kind === 'nda') { ndaSignaturePath = row.signature_path; ndaDoc = doc; }
   }
 
+  if (invitation) {
+    markInvitationUsed({ token: inviteToken, visitId });
+  }
+
   recordAudit({
     action: 'visit_signed_in',
     subjectType: 'visit',
@@ -111,7 +126,8 @@ export function createVisit({
       hostUserId,
       kioskId,
       visitorId: visitorRow?.id ?? null,
-      source: 'kiosk',
+      invitationId: invitation?.id ?? null,
+      source: invitation ? 'invitation' : 'kiosk',
       acknowledgments: requiredKinds.map(r => ({
         kind: r.kind,
         version: r.doc.version,

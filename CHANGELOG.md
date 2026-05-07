@@ -4,6 +4,58 @@ All notable changes to visitas.world are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses semantic versioning.
 
+## [0.7.0] — 2026-05-06
+
+Pre-registration. Hosts pre-book expected visitors via the new Invitations
+admin page; visitas emails the invitee a link with an inline QR code. On
+arrival the visitor scans the QR with their phone (or opens the link on
+the iPad), the kiosk reads the invitation, pre-fills the form, and locks
+the host to the pre-booked one. Single-use, 7-day expiry by default.
+
+### Added
+- **`prereg_invitations` table** with token UNIQUE, host_user_id FK,
+  optional kiosk_id FK (lock invitation to a specific entrance),
+  status check ('sent'|'used'|'cancelled'|'expired'), expires_at default
+  +7d, used_at + used_visit_id linkage. Migration 006.
+- **`services/invitations.js`** — `createInvitation` (32-hex token via
+  `crypto.randomBytes`), `getByToken` (lazy-expires past `expires_at`),
+  `markUsed`, `cancel`, `listAll`. Audit rows on every state transition.
+- **`POST /api/invitations`** (admin), **`GET /api/invitations`** (admin),
+  **`DELETE /api/invitations/:id`** (admin cancel),
+  **`POST /api/invitations/:id/resend`** (admin), and
+  **`GET /api/invitations/:token`** (public) for the kiosk to look up an
+  invitation by token (returns 410 for expired/used/cancelled).
+- **`POST /api/visits` accepts optional `inviteToken`** — when set, server
+  ignores any client-supplied `hostUserId` and locks host (and kiosk, if
+  the invitation pinned one) to the invitation, marks the invitation
+  `used`, and links it to the new visit. Audit `details.invitationId` +
+  `details.source: 'invitation'`.
+- **Invitation email** with HTML body + inline QR code (server-side
+  rendering via the `qrcode` package, embedded as a CID attachment so it
+  shows in the email client). Subject `[visitas.world] Invitation to
+  visit — {host}`. Best-effort send; SMTP failure is logged but does
+  not fail the invitation creation.
+- **Admin Invitations page** at `/admin/invitations` — form (visitor
+  name + email + company + phone + host + optional kiosk + expected /
+  purpose) plus a list grouped by status with **Copy link**, **Resend**,
+  **Cancel** actions.
+- **Kiosk `?invite=token` flow** — Kiosk reads `invite` from URL on
+  mount, fetches `/api/invitations/{token}`, pre-fills the form, shows a
+  "You were expected" banner with host + expected time, and locks the
+  host field with a pre-booked badge. Invalid / expired tokens surface
+  a friendly fallback inviting the visitor to sign in normally.
+
+### Internal
+- New dependency: `qrcode` (server-side QR rendering for invitation emails).
+- 148 → 164 vitest server tests covering: invitation create + token
+  format + expiry, host validation, security-role refused, public lookup
+  with sanitized payload, lazy-expire on read, cancel transitions,
+  visit-with-token locks host + marks used, used-token rejected with 410.
+- `notifications/invitationEmail.js` mirrors the existing
+  `visitorNda.js` test-seam pattern (`setInvitationSenderForTests`).
+  Tests bypass QR rendering + nodemailer entirely so they don't need
+  network or filesystem.
+
 ## [0.6.1] — 2026-05-06
 
 Admin Visitors page. Every visitor the kiosk has ever signed in is listed

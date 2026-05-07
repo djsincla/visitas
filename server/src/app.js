@@ -14,6 +14,7 @@ import visitsRouter from './routes/visits.js';
 import kiosksRouter from './routes/kiosks.js';
 import documentsRouter from './routes/documents.js';
 import visitorsRouter from './routes/visitors.js';
+import invitationsRouter from './routes/invitations.js';
 
 /**
  * Build an Express app instance. Migrations and admin bootstrap are NOT
@@ -31,10 +32,10 @@ export function createApp({ httpLogger = true } = {}) {
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
 
-  app.get('/api/health', (_req, res) => res.json({ ok: true, version: '0.6.1' }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, version: '0.7.0' }));
   app.get('/api', (_req, res) => res.json({
     name: 'visitas',
-    version: '0.6.1',
+    version: '0.7.0',
     endpoints: [
       'POST /api/auth/login',
       'POST /api/auth/logout',
@@ -66,6 +67,12 @@ export function createApp({ httpLogger = true } = {}) {
       'POST /api/documents (admin — saves new version)',
       'DELETE /api/documents/:kind (admin — deactivate)',
       'POST /api/visitors/lookup (public — returning-visitor pre-fill + NDA cache)',
+      'GET  /api/visitors (admin)',
+      'GET  /api/invitations/:token (public — kiosk claim pre-fill)',
+      'GET  /api/invitations (admin)',
+      'POST /api/invitations (admin — sends email with QR)',
+      'POST /api/invitations/:id/resend (admin)',
+      'DELETE /api/invitations/:id (admin — cancel)',
     ],
   }));
 
@@ -78,6 +85,7 @@ export function createApp({ httpLogger = true } = {}) {
   app.use('/api/kiosks', kiosksRouter);
   app.use('/api/documents', documentsRouter);
   app.use('/api/visitors', visitorsRouter);
+  app.use('/api/invitations', invitationsRouter);
 
   // Serve uploaded files (logos etc.) — no auth required because the logo is public branding.
   // fallthrough:false so missing files return 404 instead of falling into the SPA catch-all.
