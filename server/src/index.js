@@ -1,10 +1,11 @@
 import { config } from './config.js';
 import { logger } from './logger.js';
-import { runMigrations, bootstrapAdmin } from './db/migrate.js';
+import { runMigrations, bootstrapAdmin, seedDocumentsFromConfig } from './db/migrate.js';
 import { createApp } from './app.js';
 
 runMigrations();
 bootstrapAdmin();
+seedDocumentsFromConfig();
 
 const app = createApp();
 const server = app.listen(config.port, () => {

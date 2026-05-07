@@ -4,6 +4,82 @@ All notable changes to visitas.world are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses semantic versioning.
 
+## [0.5.0] — 2026-05-06
+
+NDA + safety briefing acknowledgments. Visitor must scroll to the bottom of
+the document before they can acknowledge; the NDA additionally needs a drawn
+signature on the iPad. Both documents are admin-editable, versioned (each save
+bumps), and seeded from `config/visitor-form.json` on first run. After
+acknowledgment, a copy of the signed NDA is emailed to the visitor (best-effort
+— failure logs but doesn't block sign-in).
+
+### Added
+- **Documents** as a first-class entity. `documents(id, kind, version, title,
+  body, active)` — `kind` is `nda` or `safety`. Only one active row per kind
+  at a time, enforced by a partial unique index. Each save bumps version and
+  flips the previous active row inactive (transactional).
+- **Visit acknowledgments** — `visit_acknowledgments(id, visit_id FK,
+  document_id FK, signed_name, signature_path, acknowledged_at)`. Captured
+  alongside the visit; on read the visit payload includes `acknowledgments[]`
+  with `kind`, `documentVersion`, `documentTitle`, `signedName`, `signaturePath`,
+  `acknowledgedAt`.
+- **Drawn signature pad** at the kiosk for NDA — `<canvas>` with pointer
+  events (works for finger / stylus / mouse), captures as PNG via
+  `toDataURL`. Stored to `data/signatures/visit-{id}-nda.png` and referenced
+  from the acknowledgment row.
+- **Scroll-to-bottom enforcement** — both safety and NDA bodies must be
+  scrolled to the bottom (with a small slop tolerance for sub-pixel
+  rounding) before the acknowledge / sign button activates. Short documents
+  that fit without scrolling auto-pass. Standard digital "I have seen this"
+  pattern.
+- **Server-enforced acknowledgment** — `POST /api/visits` refuses with 400
+  if the active NDA / safety document exists and the matching acknowledgment
+  is missing. NDA additionally requires a non-empty signature; safety just
+  needs the row.
+- **Email signed NDA copy to visitor** — when the visitor provided an email
+  and the email channel is enabled, an HTML email is sent with the NDA
+  title, version, full body, signed name, timestamp, and the drawn
+  signature inline as a CID attachment. Best-effort; failure logs but does
+  not fail the sign-in.
+- **Admin Documents page** at `/admin/documents` — two cards (Safety briefing
+  + NDA), each showing the active version + title + body with inline edit,
+  Save (bumps version), Disable, and a version-history disclosure.
+- **`POST /api/documents`**, **`GET /api/documents`** (admin), and
+  **`GET /api/documents/active`** (public, kiosk reads) added to the API.
+- **Kiosk multi-stage flow** — Form → Safety (if active) → NDA + signature
+  (if active) → submit → thanks. A "Step X of Y" indicator at the top.
+  Returning to the form after a server-side validation error is preserved.
+
+### Changed
+- Marketing site `docs/index.html` roadmap grid updated to reflect actual
+  state through v0.5 and the resequenced upcoming releases (v0.6 = visitor
+  records + 1-year NDA cache, v0.7 = pre-registration, v0.8 = photo,
+  v0.9 = AD).
+- Visit creation now also returns `acknowledgments[]` in the visit payload
+  (server-side; clients seeing the visit afterwards get the same).
+- `audit_log` row for `visit_signed_in` now includes
+  `details.acknowledgments` with `[{kind, version}]` so the audit trail
+  records exactly which document version each visitor agreed to.
+
+### Internal
+- Migration 004 adds the `documents` and `visit_acknowledgments` tables
+  with appropriate indexes (active-per-kind partial unique, kind+version
+  desc, FK-cascade on visit deletion).
+- `services/documents.js` (CRUD + version logic), `services/visitAcknowledgments.js`
+  (row writes + signature file persistence), `notifications/visitorNda.js`
+  (signed-NDA email with inline-signature attachment, separate test seam
+  from the host-notification email transport).
+- Visitor form schema now seeds initial NDA + safety bodies from
+  `config/visitor-form.json` on first run; once any rows exist, the file
+  is no longer consulted (DB authoritative).
+- 109 → 128 vitest server tests covering: doc CRUD + version bump + only-one-active,
+  public active-doc endpoint sanitized, admin-only writes, security-role
+  refused, ack-required-on-active-doc gating, NDA-needs-signature gating,
+  signature PNG written to disk, visitor email sent + skipped on
+  no-email / channel-disabled, audit details capture acked versions.
+- E2E specs extended: admin spec enables both documents; visitor spec
+  walks the full form → safety → NDA + signature → thanks → badge flow.
+
 ## [0.4.0] — 2026-05-06
 
 Multi-iPad. Each entrance can have its own kiosk URL with its own display

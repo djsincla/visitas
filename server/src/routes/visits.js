@@ -8,6 +8,14 @@ import { renderBadge } from '../services/badge.js';
 
 const router = Router();
 
+const ackSchema = z.object({
+  kind: z.enum(['nda', 'safety']),
+  signedName: z.string().max(128).nullable().optional(),
+  // PNG data URL or raw base64. Capped well above expected signature size
+  // but well below DOS-as-input territory.
+  signaturePngBase64: z.string().max(2_000_000).nullable().optional(),
+});
+
 const createSchema = z.object({
   visitorName: z.string().min(1).max(128),
   company: z.string().max(128).nullable().optional(),
@@ -17,6 +25,7 @@ const createSchema = z.object({
   purpose: z.string().max(256).nullable().optional(),
   fields: z.record(z.string(), z.any()).optional(),
   kioskSlug: z.string().min(1).max(64).nullable().optional(),
+  acknowledgments: z.array(ackSchema).optional(),
 });
 
 // Public: the kiosk creates visits without auth. Trust-the-LAN.
@@ -33,6 +42,7 @@ router.post('/', (req, res, next) => {
       purpose: parse.data.purpose ?? null,
       fields: parse.data.fields ?? {},
       kioskSlug: parse.data.kioskSlug ?? null,
+      acknowledgments: parse.data.acknowledgments ?? [],
     });
     res.status(201).json({ visit: v });
   } catch (e) { next(e); }

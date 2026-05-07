@@ -81,8 +81,10 @@
 <section class="block">
   <h2>What's planned</h2>
   <p class="muted" style="margin-bottom: 16px;">
-    The project is shipping in small honest steps. v0.1 (the scaffold) is done;
-    the rest land iteratively.
+    The project is shipping in small honest steps. Done so far:
+    scaffold, kiosk sign-in, host notifications, multi-iPad with AirPrint
+    badges. NDA + safety acknowledgments are landing now; visitor records,
+    pre-registration, photo capture, and AD lookup follow.
   </p>
 
   <div class="grid">
@@ -94,53 +96,83 @@
         bootstrap <code>admin/admin</code>, host CRUD, branding settings,
         configurable visitor-form schema (<code>config/visitor-form.json</code>).
       </p>
-      <p class="muted">Where you are now.</p>
+      <p class="muted">Shipped.</p>
     </article>
 
     <article>
       <h3>v0.2 — kiosk sign-in</h3>
       <p>
-        The actual iPad-facing sign-in flow: visitor types name / company / host /
-        purpose, active-visitors view, sign-out at the same kiosk, full audit log.
+        The iPad-facing sign-in flow: visitor types name / company / host /
+        purpose, active-visitors admin page, public wall view at <code>/active</code>
+        for fire drills, sign-out at the same kiosk. Full audit log on every
+        transition. Adds a second <code>security</code> role for reception staff.
       </p>
+      <p class="muted">Shipped.</p>
     </article>
 
     <article>
       <h3>v0.3 — host notifications</h3>
       <p>
-        Email via SMTP (<code>nodemailer</code>) and SMS via a small Twilio adapter.
-        Per-host phone and email fields, configurable per-event filters.
+        Email via SMTP (<code>nodemailer</code>) and SMS via a small Twilio
+        REST adapter. Per-channel events filter; secrets in env, transport
+        config in <code>config/notifications.json</code>. Settings page test
+        buttons for both channels.
       </p>
+      <p class="muted">Shipped.</p>
     </article>
 
     <article>
-      <h3>v0.4 — printable badge</h3>
+      <h3>v0.4 — multi-iPad + AirPrint badges</h3>
       <p>
-        AirPrint-friendly badge view rendered straight from the iPad. Logo,
-        visitor name, host, date, expires-end-of-day. Configurable layout.
+        Each entrance gets its own kiosk URL (<code>/kiosk/&lt;slug&gt;</code>)
+        with a default-printer-name hint (MDM enforces the actual AirPrint
+        default per iPad). After sign-in the kiosk auto-pops a printable
+        AirPrint badge. Wall view filters per kiosk for multiple muster points.
       </p>
+      <p class="muted">Shipped.</p>
     </article>
 
     <article>
-      <h3>v0.5 — NDA &amp; safety</h3>
+      <h3>v0.5 — NDA &amp; safety acknowledgments</h3>
       <p>
-        Admin-editable, versioned NDA and safety briefing acknowledgments.
-        Visitor signs the NDA on the iPad with a drawn signature, captured
-        as PNG and stored against the visit record.
+        Admin-editable, versioned NDA and safety briefing. Visitor must
+        scroll to the bottom before acknowledging; NDA needs a drawn
+        signature on the iPad (canvas → PNG, stored against the visit + version).
+        A signed-NDA copy is emailed to the visitor.
       </p>
+      <p class="muted">Where you are now.</p>
     </article>
 
     <article>
-      <h3>v0.6 — pre-registration &amp; photo</h3>
+      <h3>v0.6 — visitor records &amp; NDA cache</h3>
       <p>
-        Hosts pre-book expected visitors; the visitor gets an email invite with
-        a QR code. They scan it at the kiosk, the front camera captures a photo,
-        the photo prints on the badge. 30-day photo retention, then auto-purged.
+        Visitors are first-class: keyed by email, returning visitors get
+        their name / company / phone pre-filled from a previous visit.
+        If the same visitor acknowledged the current NDA version in the
+        last 365 days, the kiosk skips the NDA step on this visit.
       </p>
     </article>
 
     <article>
-      <h3>v0.7 — AD hosts</h3>
+      <h3>v0.7 — pre-registration via QR</h3>
+      <p>
+        Hosts pre-book expected visitors; the visitor gets an email invite
+        with a QR code. They scan the QR at the kiosk to claim the booking
+        and skip the form fields they're already on file for.
+      </p>
+    </article>
+
+    <article>
+      <h3>v0.8 — photo capture</h3>
+      <p>
+        The iPad's front camera captures a visitor photo at sign-in. It
+        prints on the badge and is retained for 30 days against the visit
+        record, then auto-purged by a daily sweep.
+      </p>
+    </article>
+
+    <article>
+      <h3>v0.9 — AD hosts</h3>
       <p>
         Optional <code>ldapts</code> lookup for hosts from the
         <code>visitas-world</code> AD group. Same env-driven on/off pattern as cambiar;

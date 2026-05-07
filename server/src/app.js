@@ -12,6 +12,7 @@ import visitorFormRouter from './routes/visitorForm.js';
 import hostsRouter from './routes/hosts.js';
 import visitsRouter from './routes/visits.js';
 import kiosksRouter from './routes/kiosks.js';
+import documentsRouter from './routes/documents.js';
 
 /**
  * Build an Express app instance. Migrations and admin bootstrap are NOT
@@ -29,10 +30,10 @@ export function createApp({ httpLogger = true } = {}) {
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
 
-  app.get('/api/health', (_req, res) => res.json({ ok: true, version: '0.4.0' }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, version: '0.5.0' }));
   app.get('/api', (_req, res) => res.json({
     name: 'visitas',
-    version: '0.4.0',
+    version: '0.5.0',
     endpoints: [
       'POST /api/auth/login',
       'POST /api/auth/logout',
@@ -59,6 +60,10 @@ export function createApp({ httpLogger = true } = {}) {
       'POST /api/kiosks (admin)',
       'PATCH /api/kiosks/:slug (admin)',
       'DELETE /api/kiosks/:slug (admin — soft deactivate)',
+      'GET  /api/documents/active (public — kiosk reads NDA + safety bodies)',
+      'GET  /api/documents (admin — version history)',
+      'POST /api/documents (admin — saves new version)',
+      'DELETE /api/documents/:kind (admin — deactivate)',
     ],
   }));
 
@@ -69,6 +74,7 @@ export function createApp({ httpLogger = true } = {}) {
   app.use('/api/hosts', hostsRouter);
   app.use('/api/visits', visitsRouter);
   app.use('/api/kiosks', kiosksRouter);
+  app.use('/api/documents', documentsRouter);
 
   // Serve uploaded files (logos etc.) — no auth required because the logo is public branding.
   // fallthrough:false so missing files return 404 instead of falling into the SPA catch-all.

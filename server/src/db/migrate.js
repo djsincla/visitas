@@ -1,9 +1,10 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcrypt';
 import { db } from './index.js';
 import { logger } from '../logger.js';
+import { config } from '../config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -51,9 +52,39 @@ export function bootstrapAdmin() {
   return true;
 }
 
+/**
+ * Seed documents (NDA + safety) from config/visitor-form.json on first run.
+ * Once any documents row exists for that kind, the DB is authoritative and
+ * the seed is a no-op for that kind.
+ */
+export function seedDocumentsFromConfig() {
+  const path = resolve(config.repoRoot, 'config/visitor-form.json');
+  if (!existsSync(path)) return false;
+
+  let cfg;
+  try { cfg = JSON.parse(readFileSync(path, 'utf8')); }
+  catch (e) { logger.warn({ err: e.message }, 'visitor-form.json unparseable; skipping seed'); return false; }
+
+  let seeded = 0;
+  for (const kind of ['nda', 'safety']) {
+    const block = cfg[kind];
+    if (!block || !block.body) continue;
+    const exists = db.prepare('SELECT 1 FROM documents WHERE kind = ?').get(kind);
+    if (exists) continue;
+    db.prepare(`
+      INSERT INTO documents (kind, version, title, body, active)
+      VALUES (?, 1, ?, ?, ?)
+    `).run(kind, block.title || (kind === 'nda' ? 'Visitor non-disclosure agreement' : 'Workshop safety briefing'), block.body, block.enabled ? 1 : 0);
+    seeded++;
+  }
+  if (seeded) logger.info({ seeded }, 'seeded documents from visitor-form.json');
+  return seeded > 0;
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   runMigrations();
   bootstrapAdmin();
+  seedDocumentsFromConfig();
   logger.info('migrations complete');
   process.exit(0);
 }

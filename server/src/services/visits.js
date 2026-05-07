@@ -1,6 +1,9 @@
 import { db } from '../db/index.js';
 import { recordAudit } from './audit.js';
 import { notifyVisitEventAsync } from '../notifications/index.js';
+import { getActive as getActiveDoc } from './documents.js';
+import { recordAcknowledgment, loadAcknowledgmentsForVisit } from './visitAcknowledgments.js';
+import { sendVisitorNdaCopy } from '../notifications/visitorNda.js';
 
 const VISIT_SQL = `
   SELECT v.*,
@@ -12,7 +15,11 @@ const VISIT_SQL = `
   LEFT JOIN kiosks k ON k.id = v.kiosk_id
 `;
 
-export function createVisit({ visitorName, company = null, email = null, phone = null, hostUserId, purpose = null, fields = {}, kioskSlug = null }) {
+export function createVisit({
+  visitorName, company = null, email = null, phone = null,
+  hostUserId, purpose = null, fields = {}, kioskSlug = null,
+  acknowledgments = [],
+}) {
   const host = db.prepare("SELECT id, role, active FROM users WHERE id = ?").get(hostUserId);
   if (!host) throw httpError(400, 'unknown host');
   if (host.role !== 'admin') throw httpError(400, 'host must be a host (role=admin), not a security user');
@@ -25,9 +32,24 @@ export function createVisit({ visitorName, company = null, email = null, phone =
     if (!k.active) throw httpError(400, `kiosk ${kioskSlug} is inactive`);
     kioskId = k.id;
   } else {
-    // No kiosk specified — fall back to 'default' if it exists.
     const fallback = db.prepare("SELECT id FROM kiosks WHERE slug = 'default' AND active = 1").get();
     if (fallback) kioskId = fallback.id;
+  }
+
+  // Validate acknowledgments BEFORE inserting the visit so we don't end up
+  // with a visit row missing required NDA / safety records. The caller
+  // (route layer) supplies acknowledgments[] = [{kind, signedName?, signaturePngBase64?}].
+  const requiredKinds = [];
+  for (const kind of ['nda', 'safety']) {
+    const doc = getActiveDoc(kind);
+    if (doc) requiredKinds.push({ kind, doc });
+  }
+  for (const { kind } of requiredKinds) {
+    const provided = acknowledgments.find(a => a.kind === kind);
+    if (!provided) throw httpError(400, `acknowledgment required: ${kind}`);
+    if (kind === 'nda' && !provided.signaturePngBase64) {
+      throw httpError(400, 'NDA signature required');
+    }
   }
 
   const info = db.prepare(`
@@ -44,14 +66,49 @@ export function createVisit({ visitorName, company = null, email = null, phone =
     kioskId,
   );
   const visitId = Number(info.lastInsertRowid);
+
+  // Persist acknowledgment rows + signature files.
+  let ndaSignaturePath = null;
+  let ndaDoc = null;
+  for (const { kind, doc } of requiredKinds) {
+    const ack = acknowledgments.find(a => a.kind === kind);
+    const row = recordAcknowledgment({
+      visitId,
+      documentId: doc.id,
+      kind,
+      signedName: ack?.signedName ?? visitorName,
+      signaturePngBase64: ack?.signaturePngBase64 ?? null,
+    });
+    if (kind === 'nda') { ndaSignaturePath = row.signature_path; ndaDoc = doc; }
+  }
+
   recordAudit({
     action: 'visit_signed_in',
     subjectType: 'visit',
     subjectId: visitId,
-    details: { hostUserId, kioskId, source: 'kiosk' },
+    details: {
+      hostUserId,
+      kioskId,
+      source: 'kiosk',
+      acknowledgments: requiredKinds.map(r => ({ kind: r.kind, version: r.doc.version })),
+    },
   });
   const visit = getById(visitId);
   notifyVisitEventAsync('signed_in', { visit });
+
+  // Best-effort: if NDA was signed and the visitor gave an email, mail them
+  // a copy with the signature inline. Failure logs but doesn't block.
+  if (ndaDoc && visit.email) {
+    setImmediate(() => {
+      sendVisitorNdaCopy({
+        visit,
+        document: ndaDoc,
+        signaturePath: ndaSignaturePath,
+        signedAt: visit.signedInAt,
+      }).catch(() => {});
+    });
+  }
+
   return visit;
 }
 
@@ -87,7 +144,10 @@ export function signOutVisit({ visitId, byUserId = null, method }) {
 
 export function getById(visitId) {
   const r = db.prepare(`${VISIT_SQL} WHERE v.id = ?`).get(visitId);
-  return r ? rowToVisit(r) : null;
+  if (!r) return null;
+  const v = rowToVisit(r);
+  v.acknowledgments = loadAcknowledgmentsForVisit(visitId);
+  return v;
 }
 
 export function listActive({ kioskSlug = null } = {}) {

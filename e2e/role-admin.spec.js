@@ -23,7 +23,27 @@ test('admin: bootstrap → forced password change → land on Users', async ({ p
   await expect(page.getByRole('link', { name: 'Active visitors' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Users' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Kiosks' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Documents' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Settings' })).toBeVisible();
+});
+
+test('admin: enables NDA + safety documents', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByLabel('Username').fill('admin');
+  await page.getByLabel('Password').fill('AdminNewPass1234');
+  await page.getByRole('button', { name: /Sign in/ }).click();
+
+  await page.getByRole('link', { name: 'Documents' }).click();
+  await expect(page.getByRole('heading', { name: 'Documents' })).toBeVisible();
+
+  // Save default safety briefing (already populated). Click Save & enable.
+  await page.getByRole('button', { name: 'Save & enable' }).first().click();
+  await expect(page.getByText(/Active: v1/).first()).toBeVisible();
+
+  // Save default NDA. Defaults are pre-filled in the textarea.
+  await page.getByRole('button', { name: 'Save & enable' }).first().click();
+  // Both should now show Active: v1.
+  await expect(page.locator('text=Active: v1').nth(1)).toBeVisible();
 });
 
 test('admin: creates an admin host and a security user', async ({ page }) => {
