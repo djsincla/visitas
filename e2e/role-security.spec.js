@@ -11,7 +11,7 @@ test('security: forced password change → lands on Active visitors only', async
 
   await expect(page.getByRole('heading', { name: 'Set a new password' })).toBeVisible();
   await page.getByLabel('Current password').fill('GuardPass1234');
-  await page.getByLabel('New password').fill('GuardNewPass1234');
+  await page.getByLabel('New password', { exact: true }).fill('GuardNewPass1234');
   await page.getByLabel('Confirm new password').fill('GuardNewPass1234');
   await page.getByRole('button', { name: 'Update password' }).click();
 

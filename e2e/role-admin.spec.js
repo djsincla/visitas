@@ -13,7 +13,7 @@ test('admin: bootstrap → forced password change → land on Users', async ({ p
   // Forced password change.
   await expect(page.getByRole('heading', { name: 'Set a new password' })).toBeVisible();
   await page.getByLabel('Current password').fill('admin');
-  await page.getByLabel('New password').fill('AdminNewPass1234');
+  await page.getByLabel('New password', { exact: true }).fill('AdminNewPass1234');
   await page.getByLabel('Confirm new password').fill('AdminNewPass1234');
   await page.getByRole('button', { name: 'Update password' }).click();
 
