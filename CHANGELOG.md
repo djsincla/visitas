@@ -4,6 +4,36 @@ All notable changes to visitas.world are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses semantic versioning.
 
+## [1.0.0] — 2026-05-06
+
+First stable release. Promotes `main` from the v0 development track to a
+supported `1.0` line. No new features in this release — the entire v0
+roadmap (kiosk sign-in, active visitors + wall view, security role, host
+notifications, multi-iPad, AirPrint badges, NDA + safety with drawn
+signature, returning-visitor pre-fill with 1-year NDA cache, Light/Dark/Auto
+theme, admin Visitors + Invitations + Documents pages, pre-registration via
+QR, opt-in photo capture with 30-day retention, AD host lookup) shipped
+across v0.1 → v0.9 and is what 1.0 packages up.
+
+182 vitest server tests + Playwright role-driven specs + Docker build run on
+every push. The container deploys with `docker compose up -d --build`. See
+the [README](README.md) for operator setup including the HTTPS guide for
+production iPads (camera capture requires TLS).
+
+### What 1.0 means
+- The HTTP API surface in [API reference](README.md#api-reference-v09) is
+  considered the contract. Backwards-incompatible changes after 1.0 will
+  warrant a major bump and a deprecation note in the CHANGELOG.
+- The migration sequence (`server/src/db/migrations/001_init.sql` through
+  `007_photo.sql`) is final for the 1.x line. Future migrations append.
+- `config/auth.json`, `config/notifications.json`, and
+  `config/visitor-form.json` are stable shapes — additive changes only,
+  unknown fields ignored.
+
+### Internal
+- `package.json` × 3 + `server/src/app.js` health/endpoint-index strings
+  bumped to `1.0.0`. Tagged `v1.0.0` on the commit.
+
 ## [0.9.0] — 2026-05-06
 
 Active Directory lookup. Workshop staff in the configured AD group

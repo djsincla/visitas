@@ -10,7 +10,7 @@ For a higher-level overview of what the project is, who it's for, and what it de
 
 ## Status
 
-**v0.9 — Active Directory host lookup.** v0 roadmap complete. Workshop staff in the configured AD group (`visitas-world`) can log in with their AD credentials and become hosts in the kiosk typeahead. AD is opt-in — flip `auth.ad.enabled` in `config/auth.json` and supply `AD_BIND_PASSWORD` via env. Local accounts continue to work; bootstrap admin always logs in even if AD is down. See [CHANGELOG.md](CHANGELOG.md) and the [project site](https://djsincla.github.io/visitas/).
+**1.0.0 — first stable release.** The v0 roadmap is complete. The entire feature set (kiosk sign-in, active visitors, wall view, security role, host notifications, multi-iPad with AirPrint badges, NDA + safety with drawn signature, returning-visitor pre-fill with 1-year NDA cache, pre-registration via QR, opt-in photo capture with 30-day retention, and Active Directory host lookup) is shipped and packaged as `1.0.0`. The HTTP API and the `001`–`007` migration sequence are now considered the 1.x contract; additive changes only. See [CHANGELOG.md](CHANGELOG.md) and the [project site](https://djsincla.github.io/visitas/).
 
 ## Contents
 
