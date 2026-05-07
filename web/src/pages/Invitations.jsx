@@ -144,28 +144,28 @@ function NewInvitation({ onCreated }) {
   return (
     <form className="panel" onSubmit={onSubmit}>
       <h2>New invitation</h2>
-      <label>Visitor name <span className="req">*</span></label>
-      <input value={visitorName} onChange={e => setName(e.target.value)} required />
-      <label>Visitor email <span className="req">*</span></label>
-      <input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-      <label>Company</label>
-      <input value={company} onChange={e => setCompany(e.target.value)} />
-      <label>Phone</label>
-      <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} />
-      <label>Host <span className="req">*</span></label>
-      <select value={hostUserId} onChange={e => setHostUserId(e.target.value)} required>
+      <label htmlFor="new-inv-name">Visitor name <span className="req">*</span></label>
+      <input id="new-inv-name" value={visitorName} onChange={e => setName(e.target.value)} required />
+      <label htmlFor="new-inv-email">Visitor email <span className="req">*</span></label>
+      <input id="new-inv-email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+      <label htmlFor="new-inv-company">Company</label>
+      <input id="new-inv-company" value={company} onChange={e => setCompany(e.target.value)} />
+      <label htmlFor="new-inv-phone">Phone</label>
+      <input id="new-inv-phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} />
+      <label htmlFor="new-inv-host">Host <span className="req">*</span></label>
+      <select id="new-inv-host" value={hostUserId} onChange={e => setHostUserId(e.target.value)} required>
         <option value="">Choose a host…</option>
         {(hostsQ.data?.hosts ?? []).map(h => <option key={h.id} value={h.id}>{h.displayName}</option>)}
       </select>
-      <label>Kiosk (optional — locks invitation to this entrance)</label>
-      <select value={kioskSlug} onChange={e => setKioskSlug(e.target.value)}>
+      <label htmlFor="new-inv-kiosk">Kiosk (optional — locks invitation to this entrance)</label>
+      <select id="new-inv-kiosk" value={kioskSlug} onChange={e => setKioskSlug(e.target.value)}>
         <option value="">Any kiosk</option>
         {(kiosksQ.data?.kiosks ?? []).map(k => <option key={k.slug} value={k.slug}>{k.name}</option>)}
       </select>
-      <label>Expected (free-form, e.g. &ldquo;Tuesday 2pm&rdquo;)</label>
-      <input value={expectedAt} onChange={e => setExpectedAt(e.target.value)} />
-      <label>Purpose</label>
-      <input value={purpose} onChange={e => setPurpose(e.target.value)} />
+      <label htmlFor="new-inv-expected">Expected (free-form, e.g. &ldquo;Tuesday 2pm&rdquo;)</label>
+      <input id="new-inv-expected" value={expectedAt} onChange={e => setExpectedAt(e.target.value)} />
+      <label htmlFor="new-inv-purpose">Purpose</label>
+      <input id="new-inv-purpose" value={purpose} onChange={e => setPurpose(e.target.value)} />
       {err && <div className="error">{err}</div>}
       <div style={{ marginTop: 16 }}>
         <button type="submit" disabled={m.isPending}>{m.isPending ? 'Sending…' : 'Create + email'}</button>

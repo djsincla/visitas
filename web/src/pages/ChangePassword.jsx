@@ -33,12 +33,12 @@ export default function ChangePassword({ forced = false }) {
       <form className="panel login-card" onSubmit={onSubmit}>
         <h1>{forced ? 'Set a new password' : 'Change password'}</h1>
         {forced && <div className="banner">You must change your password before continuing.</div>}
-        <label>Current password</label>
-        <input type="password" value={current} onChange={e => setCurrent(e.target.value)} required />
-        <label>New password</label>
-        <input type="password" value={next} onChange={e => setNext(e.target.value)} required />
-        <label>Confirm new password</label>
-        <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required />
+        <label htmlFor="cp-current">Current password</label>
+        <input id="cp-current" type="password" value={current} onChange={e => setCurrent(e.target.value)} required />
+        <label htmlFor="cp-new">New password</label>
+        <input id="cp-new" type="password" value={next} onChange={e => setNext(e.target.value)} required />
+        <label htmlFor="cp-confirm">Confirm new password</label>
+        <input id="cp-confirm" type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required />
         {err && <div className="error">{err}</div>}
         {ok && <div style={{ color: 'var(--success)', marginTop: 8 }}>Password updated.</div>}
         <div style={{ marginTop: 16 }}>

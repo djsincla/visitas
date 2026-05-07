@@ -4,6 +4,32 @@ All notable changes to visitas.world are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses semantic versioning.
 
+## [1.0.1] — 2026-05-07
+
+CI green, no behavior change.
+
+### Fixed
+- **Admin form labels were not associated with their inputs.** Login,
+  ChangePassword, Users (new user), Kiosks (new kiosk), and Invitations
+  (new invitation) all rendered `<label>Foo</label><input>` as siblings
+  with no `for=`/`id=` linking. That's an accessibility violation and
+  Playwright's `getByLabel` can't match it — which is why every e2e spec
+  going through `/login` timed out on `getByLabel('Username')` despite
+  the heading being visible. Local vitest never caught it; the e2e CI
+  runs were getting cancelled by the next push (`cancel-in-progress`)
+  so 1.0.0 was the first run that completed and surfaced the failure.
+  Added `htmlFor={id}` + matching `id={id}` to every label/input pair
+  in the affected forms.
+
+### Changed
+- **Bumped CI + Dockerfile to Node 24** to retire the GitHub Actions
+  Node 20 deprecation warnings. `actions/checkout@v5`,
+  `actions/setup-node@v5` (with `node-version: 24`),
+  `actions/upload-artifact@v5`. Multi-stage Dockerfile now uses
+  `node:24-bookworm-slim` for build + runtime stages. `engines.node`
+  in the package.json files stays at `>=20` so operators on existing
+  Node 20 hosts can still run the server directly outside Docker.
+
 ## [1.0.0] — 2026-05-06
 
 First stable release. Promotes `main` from the v0 development track to a

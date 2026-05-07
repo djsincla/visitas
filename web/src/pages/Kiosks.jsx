@@ -122,12 +122,12 @@ function NewKiosk({ onCreated }) {
   return (
     <form className="panel" onSubmit={onSubmit}>
       <h2>New kiosk</h2>
-      <label>Slug <span className="req">*</span></label>
-      <input value={slug} onChange={e => setSlug(e.target.value.toLowerCase())} required pattern="[a-z0-9-]+" placeholder="reception" />
-      <label>Display name <span className="req">*</span></label>
-      <input value={name} onChange={e => setName(e.target.value)} required placeholder="Reception desk" />
-      <label>Default printer name (optional, used as a hint on the badge)</label>
-      <input value={printer} onChange={e => setPrinter(e.target.value)} placeholder="Brother QL-820NWB (Reception)" />
+      <label htmlFor="new-kiosk-slug">Slug <span className="req">*</span></label>
+      <input id="new-kiosk-slug" value={slug} onChange={e => setSlug(e.target.value.toLowerCase())} required pattern="[a-z0-9-]+" placeholder="reception" />
+      <label htmlFor="new-kiosk-name">Display name <span className="req">*</span></label>
+      <input id="new-kiosk-name" value={name} onChange={e => setName(e.target.value)} required placeholder="Reception desk" />
+      <label htmlFor="new-kiosk-printer">Default printer name (optional, used as a hint on the badge)</label>
+      <input id="new-kiosk-printer" value={printer} onChange={e => setPrinter(e.target.value)} placeholder="Brother QL-820NWB (Reception)" />
       {err && <div className="error">{err}</div>}
       <div style={{ marginTop: 16 }}>
         <button type="submit" disabled={m.isPending}>{m.isPending ? 'Creating…' : 'Create kiosk'}</button>

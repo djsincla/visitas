@@ -31,10 +31,10 @@ export default function Login() {
             : <div style={{ fontSize: 18, fontWeight: 600 }}>{appName}</div>}
         </div>
         <h1>Sign in</h1>
-        <label>Username</label>
-        <input value={username} onChange={e => setU(e.target.value)} autoFocus required />
-        <label>Password</label>
-        <input type="password" value={password} onChange={e => setP(e.target.value)} required />
+        <label htmlFor="login-username">Username</label>
+        <input id="login-username" value={username} onChange={e => setU(e.target.value)} autoFocus required />
+        <label htmlFor="login-password">Password</label>
+        <input id="login-password" type="password" value={password} onChange={e => setP(e.target.value)} required />
         {err && <div className="error">{err}</div>}
         <div style={{ marginTop: 16 }}>
           <button type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>

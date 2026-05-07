@@ -144,21 +144,21 @@ function NewUser({ onCreated }) {
   return (
     <form className="panel" onSubmit={onSubmit}>
       <h2>New user</h2>
-      <label>Role <span className="req">*</span></label>
-      <select value={role} onChange={e => setRole(e.target.value)}>
+      <label htmlFor="new-user-role">Role <span className="req">*</span></label>
+      <select id="new-user-role" value={role} onChange={e => setRole(e.target.value)}>
         <option value="admin">admin — workshop member, hostable, full admin UI</option>
         <option value="security">security — active-visitors page only, can force sign-out</option>
       </select>
-      <label>Username <span className="req">*</span></label>
-      <input value={username} onChange={e => setUsername(e.target.value)} required autoFocus pattern="[A-Za-z0-9._-]+" />
-      <label>Initial password <span className="req">*</span></label>
-      <input type="text" value={password} onChange={e => setPassword(e.target.value)} required minLength={10} placeholder="≥ 10 chars, mix of upper/lower/digit" />
-      <label>Display name</label>
-      <input value={displayName} onChange={e => setDisplayName(e.target.value)} />
-      <label>Email</label>
-      <input type="email" value={email} onChange={e => setEmail(e.target.value)} />
-      <label>Mobile (for SMS notifications, v0.3+)</label>
-      <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+15555550100" />
+      <label htmlFor="new-user-username">Username <span className="req">*</span></label>
+      <input id="new-user-username" value={username} onChange={e => setUsername(e.target.value)} required autoFocus pattern="[A-Za-z0-9._-]+" />
+      <label htmlFor="new-user-password">Initial password <span className="req">*</span></label>
+      <input id="new-user-password" type="text" value={password} onChange={e => setPassword(e.target.value)} required minLength={10} placeholder="≥ 10 chars, mix of upper/lower/digit" />
+      <label htmlFor="new-user-display-name">Display name</label>
+      <input id="new-user-display-name" value={displayName} onChange={e => setDisplayName(e.target.value)} />
+      <label htmlFor="new-user-email">Email</label>
+      <input id="new-user-email" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+      <label htmlFor="new-user-phone">Mobile (for SMS notifications)</label>
+      <input id="new-user-phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+15555550100" />
       {err && <div className="error">{err}</div>}
       <div style={{ marginTop: 16 }}>
         <button type="submit" disabled={m.isPending}>{m.isPending ? 'Creating…' : 'Create user'}</button>
