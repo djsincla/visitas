@@ -22,6 +22,7 @@ export function resetDb() {
   db.exec(`
     DELETE FROM visit_acknowledgments;
     DELETE FROM visits;
+    DELETE FROM visitors;
     DELETE FROM audit_log;
     DELETE FROM settings;
     DELETE FROM users;
@@ -29,7 +30,7 @@ export function resetDb() {
     DELETE FROM kiosks WHERE slug != 'default';
     UPDATE kiosks SET active = 1, default_printer_name = NULL, name = 'Reception' WHERE slug = 'default';
   `);
-  db.exec(`DELETE FROM sqlite_sequence WHERE name IN ('users', 'audit_log', 'visits', 'documents', 'visit_acknowledgments')`);
+  db.exec(`DELETE FROM sqlite_sequence WHERE name IN ('users', 'audit_log', 'visits', 'visitors', 'documents', 'visit_acknowledgments')`);
 
   // Bootstrap admin (admin/admin, must change password) — same as runtime bootstrap.
   const hash = bcrypt.hashSync('admin', 4);

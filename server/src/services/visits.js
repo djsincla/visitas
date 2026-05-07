@@ -4,15 +4,18 @@ import { notifyVisitEventAsync } from '../notifications/index.js';
 import { getActive as getActiveDoc } from './documents.js';
 import { recordAcknowledgment, loadAcknowledgmentsForVisit } from './visitAcknowledgments.js';
 import { sendVisitorNdaCopy } from '../notifications/visitorNda.js';
+import { findOrCreateByEmail, computeNdaCache } from './visitors.js';
 
 const VISIT_SQL = `
   SELECT v.*,
          u.username AS host_username, u.display_name AS host_display_name,
          k.slug AS kiosk_slug, k.name AS kiosk_name,
-         k.default_printer_name AS kiosk_printer
+         k.default_printer_name AS kiosk_printer,
+         vr.id AS visitor_record_id, vr.email AS visitor_email
   FROM visits v
   LEFT JOIN users u ON u.id = v.host_user_id
   LEFT JOIN kiosks k ON k.id = v.kiosk_id
+  LEFT JOIN visitors vr ON vr.id = v.visitor_id
 `;
 
 export function createVisit({
@@ -36,6 +39,20 @@ export function createVisit({
     if (fallback) kioskId = fallback.id;
   }
 
+  // Look up or create the visitor record (when email present). 1-year NDA
+  // cache: a returning visitor with a recent ack of the *current active*
+  // NDA can skip the NDA acknowledgment for this visit.
+  let visitorRow = null;
+  let ndaCacheHit = null;
+  if (email) {
+    const r = findOrCreateByEmail({ email, name: visitorName, company, phone });
+    visitorRow = r.visitor;
+    if (r.isReturning) {
+      const cache = computeNdaCache(visitorRow.id);
+      if (cache.fresh) ndaCacheHit = cache;
+    }
+  }
+
   // Validate acknowledgments BEFORE inserting the visit so we don't end up
   // with a visit row missing required NDA / safety records. The caller
   // (route layer) supplies acknowledgments[] = [{kind, signedName?, signaturePngBase64?}].
@@ -45,6 +62,8 @@ export function createVisit({
     if (doc) requiredKinds.push({ kind, doc });
   }
   for (const { kind } of requiredKinds) {
+    // Skip NDA requirement when the visitor has a fresh cache hit.
+    if (kind === 'nda' && ndaCacheHit) continue;
     const provided = acknowledgments.find(a => a.kind === kind);
     if (!provided) throw httpError(400, `acknowledgment required: ${kind}`);
     if (kind === 'nda' && !provided.signaturePngBase64) {
@@ -53,8 +72,8 @@ export function createVisit({
   }
 
   const info = db.prepare(`
-    INSERT INTO visits (visitor_name, company, email, phone, host_user_id, purpose, fields_json, kiosk_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO visits (visitor_name, company, email, phone, host_user_id, purpose, fields_json, kiosk_id, visitor_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     visitorName,
     company,
@@ -64,13 +83,15 @@ export function createVisit({
     purpose,
     JSON.stringify(fields),
     kioskId,
+    visitorRow?.id ?? null,
   );
   const visitId = Number(info.lastInsertRowid);
 
-  // Persist acknowledgment rows + signature files.
+  // Persist acknowledgment rows + signature files. NDA is skipped when cache hit.
   let ndaSignaturePath = null;
   let ndaDoc = null;
   for (const { kind, doc } of requiredKinds) {
+    if (kind === 'nda' && ndaCacheHit) continue;
     const ack = acknowledgments.find(a => a.kind === kind);
     const row = recordAcknowledgment({
       visitId,
@@ -89,8 +110,17 @@ export function createVisit({
     details: {
       hostUserId,
       kioskId,
+      visitorId: visitorRow?.id ?? null,
       source: 'kiosk',
-      acknowledgments: requiredKinds.map(r => ({ kind: r.kind, version: r.doc.version })),
+      acknowledgments: requiredKinds.map(r => ({
+        kind: r.kind,
+        version: r.doc.version,
+        cached: r.kind === 'nda' && !!ndaCacheHit,
+      })),
+      ndaCacheHit: ndaCacheHit ? {
+        version: ndaCacheHit.version,
+        acknowledgedAt: ndaCacheHit.acknowledgedAt,
+      } : null,
     },
   });
   const visit = getById(visitId);
@@ -187,6 +217,10 @@ function rowToVisit(r) {
       slug: r.kiosk_slug,
       name: r.kiosk_name,
       defaultPrinterName: r.kiosk_printer,
+    } : null,
+    visitor: r.visitor_id ? {
+      id: r.visitor_id,
+      email: r.visitor_email,
     } : null,
     purpose: r.purpose,
     fields: r.fields_json ? JSON.parse(r.fields_json) : {},

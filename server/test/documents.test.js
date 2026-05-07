@@ -251,8 +251,8 @@ describe('Visit creation with acknowledgments', () => {
     const audit = row('SELECT details FROM audit_log WHERE subject_type = ? AND subject_id = ?', 'visit', create.body.visit.id);
     const details = JSON.parse(audit.details);
     expect(details.acknowledgments).toEqual(expect.arrayContaining([
-      { kind: 'nda', version: 1 },
-      { kind: 'safety', version: 1 },
+      { kind: 'nda', version: 1, cached: false },
+      { kind: 'safety', version: 1, cached: false },
     ]));
   });
 });

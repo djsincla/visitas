@@ -4,6 +4,67 @@ All notable changes to visitas.world are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses semantic versioning.
 
+## [0.6.0] — 2026-05-06
+
+Returning visitors don't have to start over. Visitors are now first-class
+records keyed by email; a returning visitor types their email and the kiosk
+pre-fills name / company / phone from their last visit. If they signed the
+**current** active NDA in the last 365 days, the kiosk also skips the NDA +
+signature step on this visit. New version of the NDA = everyone re-signs.
+
+Email is **optional** at the kiosk — visitors without an email still sign in
+just fine; they just don't get the pre-fill or the NDA cache benefit.
+
+### Added
+- **`visitors` table** keyed by email (case-insensitive partial unique index
+  on non-NULL email), with `name`, `company`, `phone`, `first_seen_at`,
+  `last_seen_at`. Visits get a nullable `visitor_id` FK. Migration 005
+  back-fills existing visits to their visitor records on first apply
+  (groups by `LOWER(email)`, uses earliest visit's metadata for seed,
+  most-recent timestamp for `last_seen_at`).
+- **`POST /api/visitors/lookup`** (public, kiosk-facing) — `{email}` →
+  `{visitor: {name, company, phone, email, isReturning, ndaCacheFresh,
+  ndaCacheVersion, ndaCacheAcknowledgedAt}}` or 404. Used by the kiosk's
+  email-onBlur to fetch returning-visitor details.
+- **`services/visitors.js`** — `findByEmail`, `findOrCreateByEmail` (case-
+  insensitive lookup; creates on miss, refreshes `last_seen_at` and updates
+  name/company/phone with what the visitor most recently typed),
+  `lookupForKiosk`, `computeNdaCache`.
+- **1-year NDA cache** — `services/visits.js > createVisit` looks up the
+  visitor by email; if found AND the visitor has a `visit_acknowledgment`
+  for the *currently active* NDA's `document_id` within the last 365 days,
+  the NDA acknowledgment + signature requirement is skipped for this visit.
+  Audit row records `ndaCacheHit: {version, acknowledgedAt}` and tags each
+  acknowledgment with `cached: true|false`.
+- **Kiosk web — returning-visitor pre-fill** — typing an email on the form
+  fires `/api/visitors/lookup` on blur; on hit, the form pre-fills any
+  fields the visitor hasn't already typed into and shows a "welcome back"
+  banner with the cached NDA notice when applicable.
+- **Kiosk web — NDA stage skip** — when the lookup says `ndaCacheFresh`,
+  the multi-stage flow excludes the NDA step. Server still re-validates
+  on submit (defense in depth). The thanks card mentions "Your NDA is on
+  file from a previous visit" instead of the standard email-copy notice.
+
+### Changed
+- The visit payload from `GET /api/visits/:id` and create now includes
+  `visitor: { id, email }` when the visit is linked to a visitor record.
+- Audit detail shape on `visit_signed_in` extended with `visitorId` and
+  `ndaCacheHit`. Existing assertions on the `acknowledgments` array now
+  include the `cached` field (always `false` when the row was actually
+  written; only the cache-hit code path sets `cached: true`).
+
+### Internal
+- Migration 005 (table-rebuild dance for `visits` to add `visitor_id` FK,
+  `@no-tx` so `PRAGMA foreign_keys` can be toggled around the rebuild;
+  back-fill is a `INSERT INTO visitors SELECT … FROM visits GROUP BY
+  LOWER(email)` followed by a correlated `UPDATE visits SET visitor_id`).
+- 128 → 145 vitest server tests covering: visitor service CRUD + case-
+  insensitive lookup + last-seen refresh, NDA cache fresh/stale/missing/
+  version-bump-invalidates/over-365-days-stale, lookup endpoint
+  (404/200/case-insensitive), visit creation linking visitor_id, NDA cache
+  hit short-circuiting acknowledgment requirement, audit details, returning
+  visitor reusing visitor_id across visits, emailless visit visitor_id=null.
+
 ## [0.5.1] — 2026-05-06
 
 Theme top-up. Adds an explicit Light / Dark / **Auto (follow system)**

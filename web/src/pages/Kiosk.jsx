@@ -10,11 +10,12 @@ const STANDARD_KEYS = new Set(['name', 'company', 'email', 'phone', 'host', 'pur
 export default function Kiosk() {
   const { slug = 'default' } = useParams();
   const { appName, logoUrl } = useBranding();
-  const [stage, setStage] = useState('form'); // 'form' | 'safety' | 'nda' | 'thanks'
-  const [pending, setPending] = useState(null); // { body fields ready to POST }
-  const [acks, setAcks] = useState([]); // accumulating ack records
+  const [stage, setStage] = useState('form');
+  const [pending, setPending] = useState(null);
+  const [acks, setAcks] = useState([]);
   const [thankYouFor, setThankYouFor] = useState(null);
   const [submitErr, setSubmitErr] = useState(null);
+  const [ndaCacheFresh, setNdaCacheFresh] = useState(false);
 
   const kioskQ = useQuery({
     queryKey: ['kiosk', slug],
@@ -44,22 +45,25 @@ export default function Kiosk() {
   const safetyDoc = docs.find(d => d.kind === 'safety');
   const ndaDoc = docs.find(d => d.kind === 'nda');
 
+  // NDA stage is needed only if there's an active NDA AND the visitor's
+  // cache is stale. Server still re-validates on submit.
   const stagesNeeded = ['form'];
   if (safetyDoc) stagesNeeded.push('safety');
-  if (ndaDoc) stagesNeeded.push('nda');
+  if (ndaDoc && !ndaCacheFresh) stagesNeeded.push('nda');
 
-  const onFormDone = (body) => {
+  const onFormDone = (body, lookupInfo) => {
     setPending(body);
     setAcks([]);
+    setNdaCacheFresh(!!lookupInfo?.ndaCacheFresh);
     if (safetyDoc) setStage('safety');
-    else if (ndaDoc) setStage('nda');
+    else if (ndaDoc && !lookupInfo?.ndaCacheFresh) setStage('nda');
     else submit(body, []);
   };
 
   const onSafetyDone = () => {
     const updated = [...acks, { kind: 'safety', signedName: pending.visitorName }];
     setAcks(updated);
-    if (ndaDoc) setStage('nda');
+    if (ndaDoc && !ndaCacheFresh) setStage('nda');
     else submit(pending, updated);
   };
 
@@ -77,18 +81,18 @@ export default function Kiosk() {
     setSubmitErr(null);
     try {
       const r = await api.post('/api/visits', { ...body, acknowledgments: ackList });
-      setThankYouFor(r.visit);
+      setThankYouFor({ ...r.visit, _ndaCacheFresh: ndaCacheFresh });
       setStage('thanks');
-      const w = window.open(`/api/visits/${r.visit.id}/badge`, '_blank', 'noopener=yes,width=480,height=320');
-      // Popup-blocked fallback handled by the Reprint badge link on the thanks card.
+      window.open(`/api/visits/${r.visit.id}/badge`, '_blank', 'noopener=yes,width=480,height=320');
     } catch (e) {
       setSubmitErr(e.data?.error || e.message);
-      setStage('form'); // bounce back so the visitor can fix the input
+      setStage('form');
     }
   };
 
   const onReset = () => {
-    setStage('form'); setPending(null); setAcks([]); setThankYouFor(null); setSubmitErr(null);
+    setStage('form'); setPending(null); setAcks([]); setThankYouFor(null);
+    setSubmitErr(null); setNdaCacheFresh(false);
   };
 
   return (
@@ -125,6 +129,8 @@ function SignInForm({ kioskSlug, initialErr, onDone }) {
   const [hostQuery, setHostQuery] = useState('');
   const [hostId, setHostId] = useState(null);
   const [err, setErr] = useState(initialErr);
+  const [lookup, setLookup] = useState(null); // { name, company, phone, ndaCacheFresh, ... } | null
+  const [lookingUp, setLookingUp] = useState(false);
 
   if (formQ.isLoading || hostsQ.isLoading) {
     return <div className="kiosk-card"><p className="muted">Loading…</p></div>;
@@ -137,6 +143,28 @@ function SignInForm({ kioskSlug, initialErr, onDone }) {
   const hosts = hostsQ.data?.hosts ?? [];
 
   const set = (k, v) => setValues(p => ({ ...p, [k]: v }));
+
+  const onEmailBlur = async () => {
+    const email = values.email?.trim();
+    if (!email || !email.includes('@')) return;
+    setLookingUp(true);
+    try {
+      const r = await api.post('/api/visitors/lookup', { email });
+      setLookup(r.visitor);
+      // Pre-fill any fields the visitor hasn't already typed something into.
+      setValues(p => ({
+        name:    p.name    || r.visitor.name    || '',
+        company: p.company || r.visitor.company || '',
+        phone:   p.phone   || r.visitor.phone   || '',
+        ...p,
+      }));
+    } catch {
+      // 404 = first-timer; ignore quietly.
+      setLookup(null);
+    } finally {
+      setLookingUp(false);
+    }
+  };
 
   const onSubmit = (e) => {
     e.preventDefault();
@@ -165,13 +193,21 @@ function SignInForm({ kioskSlug, initialErr, onDone }) {
       purpose: values.purpose?.trim() || null,
       fields: extra,
       kioskSlug,
-    });
+    }, lookup);
   };
 
   return (
     <form className="kiosk-card kiosk-form" onSubmit={onSubmit}>
       <h1>Welcome.</h1>
       <p>Sign in for your visit. We&rsquo;ll let your host know you&rsquo;re here.</p>
+
+      {lookup && (
+        <div className="kiosk-welcomeback">
+          <strong>Welcome back, {lookup.name?.split(' ')[0] || 'visitor'}.</strong> Your details are pre-filled below — edit if anything has changed.
+          {lookup.ndaCacheFresh && <div style={{ marginTop: 4, fontSize: 13 }}>Your NDA from a previous visit is still on file (v{lookup.ndaCacheVersion}); we won&rsquo;t ask you to re-sign today.</div>}
+        </div>
+      )}
+      {lookingUp && <div className="muted" style={{ fontSize: 13, marginTop: 8 }}>Checking for a previous visit…</div>}
 
       {fields.map(f => {
         if (f.type === 'host-typeahead') {
@@ -183,7 +219,15 @@ function SignInForm({ kioskSlug, initialErr, onDone }) {
             />
           );
         }
-        return <FieldInput key={f.key} field={f} value={values[f.key] ?? ''} onChange={(v) => set(f.key, v)} />;
+        return (
+          <FieldInput
+            key={f.key}
+            field={f}
+            value={values[f.key] ?? ''}
+            onChange={(v) => set(f.key, v)}
+            onBlur={f.key === 'email' ? onEmailBlur : undefined}
+          />
+        );
       })}
 
       {err && <div className="error" role="alert">{err}</div>}
@@ -197,9 +241,15 @@ function SignInForm({ kioskSlug, initialErr, onDone }) {
   );
 }
 
-function FieldInput({ field, value, onChange }) {
+function FieldInput({ field, value, onChange, onBlur }) {
   const id = `kf-${field.key}`;
-  const common = { id, value, onChange: (e) => onChange(e.target.value), placeholder: field.placeholder ?? '', required: !!field.required };
+  const common = {
+    id, value,
+    onChange: (e) => onChange(e.target.value),
+    onBlur: onBlur,
+    placeholder: field.placeholder ?? '',
+    required: !!field.required,
+  };
   return (
     <div style={{ marginTop: 16 }}>
       <label htmlFor={id}>{field.label}{field.required && <span className="req"> *</span>}</label>
@@ -255,11 +305,6 @@ function HostPicker({ field, hosts, query, setQuery, hostId, setHostId }) {
   );
 }
 
-/**
- * Scrollable document body. The "I have read this" / signature pad is gated
- * until the visitor has scrolled to the bottom — the standard digital
- * "you've seen the whole thing" pattern.
- */
 function ScrollableBody({ doc, onReachedBottom }) {
   const ref = useRef(null);
   const [reached, setReached] = useState(false);
@@ -268,13 +313,11 @@ function ScrollableBody({ doc, onReachedBottom }) {
     const el = ref.current;
     if (!el) return;
     const check = () => {
-      // 4px slop for sub-pixel rounding.
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 4;
       if (atBottom && !reached) {
         setReached(true);
         onReachedBottom?.();
       }
-      // Short documents that fit without scrolling — already at bottom.
       if (el.scrollHeight <= el.clientHeight && !reached) {
         setReached(true);
         onReachedBottom?.();
@@ -345,6 +388,7 @@ function ThankYou({ visit, kiosk, onReset }) {
   const printerName = kiosk?.defaultPrinterName;
   const badgeUrl = visit?.id ? `/api/visits/${visit.id}/badge` : null;
   const ndaAcked = (visit?.acknowledgments ?? []).some(a => a.kind === 'nda');
+  const ndaCached = visit?._ndaCacheFresh;
 
   return (
     <div className="kiosk-card">
@@ -363,6 +407,11 @@ function ThankYou({ visit, kiosk, onReset }) {
       {ndaAcked && visit?.email && (
         <p className="muted" style={{ fontSize: 14 }}>
           A copy of the signed NDA has been emailed to {visit.email}.
+        </p>
+      )}
+      {ndaCached && (
+        <p className="muted" style={{ fontSize: 14 }}>
+          Your NDA is on file from a previous visit, so we didn&rsquo;t ask you to re-sign today.
         </p>
       )}
       <button onClick={onReset} className="secondary">Done</button>
