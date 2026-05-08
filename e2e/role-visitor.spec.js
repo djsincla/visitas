@@ -66,7 +66,7 @@ test('visitor: full flow form → safety → NDA + signature → thanks → badg
   // Badge endpoint reachable.
   const badgePage = await context.newPage();
   const href = await page.getByRole('link', { name: 'Reprint badge' }).getAttribute('href');
-  expect(href).toMatch(/\/api\/visits\/\d+\/badge/);
+  expect(href).toMatch(/\/api\/visits\/badge\/[0-9a-f]{64}/);
   const res = await badgePage.goto(href);
   expect(res?.ok()).toBe(true);
   await expect(badgePage.locator('text=Bob Visitor').first()).toBeVisible();

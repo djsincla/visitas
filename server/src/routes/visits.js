@@ -1,19 +1,32 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import rateLimit from 'express-rate-limit';
 import { requireAuth, requireRole, blockIfPasswordChangeRequired } from '../middleware/auth.js';
 import { COOKIE_NAME, verifyToken } from '../auth/jwt.js';
 import { db } from '../db/index.js';
-import { createVisit, signOutVisit, getById, listActive, listAll, sanitizeForWall } from '../services/visits.js';
+import {
+  createVisit, signOutVisit, getById, getByPublicToken,
+  listActive, listAll, sanitizeForWall,
+} from '../services/visits.js';
 import { renderBadge } from '../services/badge.js';
 import { photoFileFor } from '../services/photo.js';
 
 const router = Router();
 
+// Rate limit on the public sign-out path. Skipped under NODE_ENV=test so the
+// existing suite (which fires sign-outs back to back) isn't perturbed.
+const signOutLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'too many sign-out requests, slow down' },
+  skip: () => process.env.NODE_ENV === 'test',
+});
+
 const ackSchema = z.object({
   kind: z.enum(['nda', 'safety']),
   signedName: z.string().max(128).nullable().optional(),
-  // PNG data URL or raw base64. Capped well above expected signature size
-  // but well below DOS-as-input territory.
   signaturePngBase64: z.string().max(2_000_000).nullable().optional(),
 });
 
@@ -22,14 +35,12 @@ const createSchema = z.object({
   company: z.string().max(128).nullable().optional(),
   email: z.string().email().nullable().optional(),
   phone: z.string().max(32).nullable().optional(),
-  // hostUserId is optional when inviteToken is supplied (server locks host to the invitation).
   hostUserId: z.number().int().positive().optional(),
   purpose: z.string().max(256).nullable().optional(),
   fields: z.record(z.string(), z.any()).optional(),
   kioskSlug: z.string().min(1).max(64).nullable().optional(),
   acknowledgments: z.array(ackSchema).optional(),
   inviteToken: z.string().min(8).max(128).nullable().optional(),
-  // PNG data URL or raw base64. 5 MB cap (a 1200x800 visitor photo is well under that).
   photoPngBase64: z.string().max(5_000_000).nullable().optional(),
 }).refine(
   (data) => data.hostUserId || data.inviteToken,
@@ -58,34 +69,37 @@ router.post('/', (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Public, sanitized — wall view at /active. Filterable by kiosk slug for
-// per-entrance fire roster.
+// Public, sanitized — wall view at /active reads this.
 router.get('/active', (req, res) => {
   const kioskSlug = req.query.kiosk || null;
   const visits = listActive({ kioskSlug }).map(sanitizeForWall);
   res.json({ visits, asOf: new Date().toISOString() });
 });
 
-// Printable badge — public (it's a single visit's printable HTML; no PII
-// risk beyond what the visitor just typed). Returns standalone HTML so the
-// kiosk can window.print() it after sign-in.
-router.get('/:id/badge', (req, res) => {
-  const v = getById(Number(req.params.id));
+// Token-keyed badge — public, but the random 64-hex token in the URL is
+// unguessable, so this can't be enumerated by walking visit ids.
+router.get('/badge/:token', (req, res) => {
+  const v = getByPublicToken(req.params.token);
   if (!v) return res.status(404).type('text/plain').send('visit not found');
+  res.set('Cache-Control', 'private, no-store');
   res.type('text/html').send(renderBadge(v));
 });
 
-// Public photo endpoint. Returns the PNG file when present, 404 when the
-// retention sweep has purged it (>30 days old) or no photo was captured.
-router.get('/:id/photo', (req, res) => {
-  const file = photoFileFor(Number(req.params.id));
+// Token-keyed photo — same deal. 404 once the retention sweep purges it.
+router.get('/photo/:token', (req, res) => {
+  const v = getByPublicToken(req.params.token);
+  if (!v) return res.status(404).type('text/plain').send('photo not available');
+  const file = photoFileFor(v.id);
   if (!file) return res.status(404).type('text/plain').send('photo not available');
+  res.set('Cache-Control', 'private, no-store');
   res.type('image/png').sendFile(file);
 });
 
 // Sign-out. Public when called without auth (visitor self-signs-out at kiosk),
 // admin/security when called with a valid session cookie (force sign-out).
-router.post('/:id/sign-out', (req, res, next) => {
+// Rate-limited on the public path; admin/security with auth bypasses the
+// limiter because their sign-outs are deliberate and audited.
+router.post('/:id/sign-out', signOutLimiter, (req, res, next) => {
   const id = Number(req.params.id);
   const callerId = tryIdentifyUser(req);
   const isAdminOrSecurity = callerId

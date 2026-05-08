@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { db } from '../db/index.js';
 import { recordAudit } from './audit.js';
 import { notifyVisitEventAsync } from '../notifications/index.js';
@@ -83,9 +84,14 @@ export function createVisit({
     }
   }
 
+  // 64-hex random token used to key public badge + photo URLs so they
+  // can't be enumerated by walking sequential ids. Match the format the
+  // backfill in 008_public_token.sql produced.
+  const publicToken = randomBytes(32).toString('hex');
+
   const info = db.prepare(`
-    INSERT INTO visits (visitor_name, company, email, phone, host_user_id, purpose, fields_json, kiosk_id, visitor_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO visits (visitor_name, company, email, phone, host_user_id, purpose, fields_json, kiosk_id, visitor_id, public_token)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     visitorName,
     company,
@@ -96,6 +102,7 @@ export function createVisit({
     JSON.stringify(fields),
     kioskId,
     visitorRow?.id ?? null,
+    publicToken,
   );
   const visitId = Number(info.lastInsertRowid);
 
@@ -120,9 +127,11 @@ export function createVisit({
   }
 
   // Photo capture (opt-in via settings.photo.enabled). Silently ignore
-  // photoPngBase64 when the channel is disabled.
+  // photoPngBase64 when the channel is disabled. Magic-byte rejection
+  // (assertPng inside storePhoto) propagates as 400 to the client so a
+  // hostile request with non-PNG bytes gets a clear refusal.
   if (photoEnabled() && photoPngBase64) {
-    try { storePhoto({ visitId, photoPngBase64 }); } catch {}
+    storePhoto({ visitId, photoPngBase64 });
   }
 
   recordAudit({
@@ -203,6 +212,13 @@ export function getById(visitId) {
   return v;
 }
 
+/** Look up by the public token. Used by the unauth'd badge + photo routes. */
+export function getByPublicToken(token) {
+  if (!token) return null;
+  const r = db.prepare(`${VISIT_SQL} WHERE v.public_token = ?`).get(token);
+  return r ? rowToVisit(r) : null;
+}
+
 export function listActive({ kioskSlug = null } = {}) {
   let sql = `${VISIT_SQL} WHERE v.status = 'on_site'`;
   const params = [];
@@ -246,6 +262,7 @@ function rowToVisit(r) {
       email: r.visitor_email,
     } : null,
     photoPath: r.photo_path ?? null,
+    publicToken: r.public_token ?? null,
     purpose: r.purpose,
     fields: r.fields_json ? JSON.parse(r.fields_json) : {},
     status: r.status,

@@ -19,7 +19,9 @@ export function renderBadge(visit) {
     : null;
   const appName = escapeHtml(branding.appName || 'visitas.world');
   const logoUrl = branding.logoUrl ? escapeHtml(branding.logoUrl) : null;
-  const photoUrl = visit.photoPath ? `/api/visits/${visit.id}/photo` : null;
+  const photoUrl = visit.photoPath && visit.publicToken
+    ? `/api/visits/photo/${visit.publicToken}`
+    : null;
 
   return `<!doctype html>
 <html lang="en">

@@ -137,6 +137,20 @@ describe('Visit creation with acknowledgments', () => {
     expect(res.body.error).toMatch(/acknowledgment required: nda/);
   });
 
+  test('refuses non-PNG bytes for NDA signature (magic-byte check)', async () => {
+    saveDocument({ kind: 'nda', title: 'NDA', body: 'No leaks.' });
+    const host = createUser({ username: 'h', email: 'h@x.com', role: 'admin' });
+
+    // Junk base64 that decodes to ASCII — no PNG signature.
+    const junk = Buffer.from('definitely not png bytes').toString('base64');
+    const res = await client().post('/api/visits').send({
+      visitorName: 'Alice', hostUserId: host.id,
+      acknowledgments: [{ kind: 'nda', signedName: 'Alice', signaturePngBase64: junk }],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid signature PNG/);
+  });
+
   test('refuses NDA acknowledgment without signature', async () => {
     saveDocument({ kind: 'nda', title: 'NDA', body: 'No leaks.' });
     const host = createUser({ username: 'h', email: 'h@x.com', role: 'admin' });

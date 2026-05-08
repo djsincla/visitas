@@ -4,6 +4,62 @@ All notable changes to visitas.world are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses semantic versioning.
 
+## [1.1.0] — 2026-05-07
+
+Security pass. Three findings from the 1.0.1 code review, all fixed:
+**(1)** the public badge + photo endpoints were keyed on sequential visit
+ids, so anyone on the LAN could enumerate them and scrape every visitor's
+photo + name + host; **(2)** PNG uploads (signature, photo) had no
+magic-byte validation, so a hostile request could land arbitrary binary
+on disk with a `.png` extension; **(3)** `/api/auth/login` had no rate
+limit, so the bcrypt-12 cost was the only brake on a brute-force.
+
+### Changed (security — minor breaking)
+- **`/api/visits/:id/badge` and `/api/visits/:id/photo` are gone.**
+  Replaced by `/api/visits/badge/:token` and `/api/visits/photo/:token`,
+  where `:token` is a 64-hex random string in the visit row. The kiosk
+  receives the token in the `POST /api/visits` response (`visit.publicToken`)
+  and uses it to construct the print + reprint URLs. External integrations
+  built against the old paths must be updated; visit ids alone no longer
+  fetch badges or photos.
+- **`POST /api/auth/login` is rate-limited** to 10 requests / minute / IP.
+  429 with structured error body when over. Skipped under
+  `NODE_ENV=test`. Same limit on `POST /api/visits/:id/sign-out` to
+  prevent enumeration-driven mass sign-out as a denial-of-service.
+- **PNG payloads now validated.** Decoded buffers must start with the
+  PNG magic signature (`89 50 4E 47 0D 0A 1A 0A`); a 400 with `invalid
+  signature PNG` / `invalid photo PNG` is returned otherwise. Applied to
+  the NDA-signature path (`services/visitAcknowledgments.js`) and the
+  visitor-photo path (`services/photo.js`). Centralized in `services/png.js`.
+
+### Added
+- **Migration 008**: `visits.public_token` (64-hex unique). Plain
+  `ALTER TABLE ADD COLUMN`, no table-rebuild dance — that approach was
+  defensive overkill for the 002–007 nullable adds; using it correctly
+  here as a guidepost for future migrations (review item #20).
+- **`Cache-Control: private, no-store`** on the token-keyed badge + photo
+  responses so intermediate caches don't accidentally serve them.
+
+### Internal
+- New dependency: `express-rate-limit`.
+- Sanitized wall-view payload (`/api/visits/active`) was already free of
+  the public token — re-verified post-change. Tokens never appear in any
+  list endpoint; only on the create response and inside the kiosk's
+  reprint link.
+- 182 → 185 vitest server tests covering: token route success +
+  unenumerable-by-id, magic-byte rejection on photo + signature paths,
+  visit payload includes `publicToken`. The rate-limit smoke is implicit —
+  the existing suite (which fires lots of logins back-to-back) now
+  exercises the `skip: NODE_ENV === 'test'` opt-out and stays green.
+
+### Migration notes for operators
+- No action needed: existing visits get a token via the migration's
+  `lower(hex(randomblob(32)))` backfill.
+- If you've embedded `/api/visits/:id/badge` URLs anywhere outside the
+  kiosk (e.g. a custom integration), they'll 401 after upgrade. Switch
+  to `/api/visits/badge/:token` and pull the token from the visit
+  payload.
+
 ## [1.0.1] — 2026-05-07
 
 CI green, no behavior change.

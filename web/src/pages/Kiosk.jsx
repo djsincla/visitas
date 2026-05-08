@@ -133,7 +133,7 @@ export default function Kiosk() {
       });
       setThankYouFor({ ...r.visit, _ndaCacheFresh: ndaCacheFresh });
       setStage('thanks');
-      window.open(`/api/visits/${r.visit.id}/badge`, '_blank', 'noopener=yes,width=480,height=320');
+      window.open(`/api/visits/badge/${r.visit.publicToken}`, '_blank', 'noopener=yes,width=480,height=320');
     } catch (e) {
       setSubmitErr(e.data?.error || e.message);
       setStage('form');
@@ -472,7 +472,7 @@ function ThankYou({ visit, kiosk, onReset }) {
 
   const hostName = visit?.host?.displayName || visit?.host?.username || 'your host';
   const printerName = kiosk?.defaultPrinterName;
-  const badgeUrl = visit?.id ? `/api/visits/${visit.id}/badge` : null;
+  const badgeUrl = visit?.publicToken ? `/api/visits/badge/${visit.publicToken}` : null;
   const ndaAcked = (visit?.acknowledgments ?? []).some(a => a.kind === 'nda');
   const ndaCached = visit?._ndaCacheFresh;
 

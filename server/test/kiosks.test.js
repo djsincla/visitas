@@ -158,7 +158,7 @@ describe('Wall view filters by kiosk', () => {
   });
 });
 
-describe('GET /api/visits/:id/badge (public)', () => {
+describe('GET /api/visits/badge/:token (public)', () => {
   beforeEach(resetDb);
 
   test('returns printable HTML with visitor + host + kiosk + printer hint', async () => {
@@ -168,9 +168,10 @@ describe('GET /api/visits/:id/badge (public)', () => {
     const create = await client().post('/api/visits').send({
       visitorName: 'Bob Visitor', company: 'ACME', hostUserId: host.id,
     });
-    const id = create.body.visit.id;
+    const token = create.body.visit.publicToken;
+    expect(token).toMatch(/^[0-9a-f]{64}$/);
 
-    const res = await client().get(`/api/visits/${id}/badge`);
+    const res = await client().get(`/api/visits/badge/${token}`);
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/text\/html/);
     expect(res.text).toContain('Bob Visitor');
@@ -184,13 +185,21 @@ describe('GET /api/visits/:id/badge (public)', () => {
     const create = await client().post('/api/visits').send({
       visitorName: '<script>alert(1)</script>', hostUserId: host.id,
     });
-    const res = await client().get(`/api/visits/${create.body.visit.id}/badge`);
+    const res = await client().get(`/api/visits/badge/${create.body.visit.publicToken}`);
     expect(res.text).not.toContain('<script>alert(1)</script>');
     expect(res.text).toContain('&lt;script&gt;');
   });
 
-  test('404 on unknown visit', async () => {
-    const res = await client().get('/api/visits/9999/badge');
+  test('404 on unknown token', async () => {
+    const res = await client().get('/api/visits/badge/' + 'a'.repeat(64));
     expect(res.status).toBe(404);
+  });
+
+  test('the old :id-keyed endpoint no longer exists', async () => {
+    const host = createUser({ username: 'h', role: 'admin' });
+    const create = await client().post('/api/visits').send({ visitorName: 'X', hostUserId: host.id });
+    const res = await client().get(`/api/visits/${create.body.visit.id}/badge`);
+    // Falls through to the admin /:id route → 401 without auth.
+    expect(res.status).toBe(401);
   });
 });

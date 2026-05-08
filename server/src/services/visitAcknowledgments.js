@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { db } from '../db/index.js';
 import { config } from '../config.js';
+import { assertPng } from './png.js';
 
 const SIG_DIR = resolve(config.dataDir, 'signatures');
 
@@ -18,6 +19,7 @@ export function recordAcknowledgment({ visitId, documentId, kind, signedName = n
     mkdirSync(SIG_DIR, { recursive: true });
     const cleaned = signaturePngBase64.replace(/^data:image\/png;base64,/, '');
     const buf = Buffer.from(cleaned, 'base64');
+    assertPng(buf, 'invalid signature PNG');
     const file = `visit-${visitId}-${kind}.png`;
     writeFileSync(resolve(SIG_DIR, file), buf);
     signaturePath = `signatures/${file}`;

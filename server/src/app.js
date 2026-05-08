@@ -32,10 +32,10 @@ export function createApp({ httpLogger = true } = {}) {
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
 
-  app.get('/api/health', (_req, res) => res.json({ ok: true, version: '1.0.1' }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, version: '1.1.0' }));
   app.get('/api', (_req, res) => res.json({
     name: 'visitas',
-    version: '1.0.1',
+    version: '1.1.0',
     endpoints: [
       'POST /api/auth/login',
       'POST /api/auth/logout',
@@ -53,7 +53,9 @@ export function createApp({ httpLogger = true } = {}) {
       'GET  /api/hosts (public, sanitized)',
       'POST /api/visits (public — kiosk)',
       'GET  /api/visits/active (public, sanitized — wall view)',
-      'POST /api/visits/:id/sign-out (public=kiosk-method, authed=admin-method)',
+      'GET  /api/visits/badge/:token (public — token-keyed, unenumerable)',
+      'GET  /api/visits/photo/:token (public — token-keyed, unenumerable)',
+      'POST /api/visits/:id/sign-out (public=kiosk-method, authed=admin-method, rate-limited)',
       'GET  /api/visits (admin or security)',
       'GET  /api/visits/:id (admin or security)',
       'GET  /api/visits/:id/badge (public, printable HTML)',

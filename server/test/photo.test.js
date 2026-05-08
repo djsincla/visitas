@@ -38,7 +38,7 @@ describe('Photo capture (opt-in via settings.photo.enabled)', () => {
   });
 });
 
-describe('GET /api/visits/:id/photo (public)', () => {
+describe('GET /api/visits/photo/:token (public)', () => {
   beforeEach(resetDb);
 
   test('returns the PNG when present', async () => {
@@ -47,7 +47,8 @@ describe('GET /api/visits/:id/photo (public)', () => {
     const c = await client().post('/api/visits').send({
       visitorName: 'A', hostUserId: host.id, photoPngBase64: TINY_PNG,
     });
-    const res = await client().get(`/api/visits/${c.body.visit.id}/photo`);
+    const token = c.body.visit.publicToken;
+    const res = await client().get(`/api/visits/photo/${token}`);
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/image\/png/);
   });
@@ -55,13 +56,25 @@ describe('GET /api/visits/:id/photo (public)', () => {
   test('404 when no photo on visit', async () => {
     const host = createUser({ username: 'h', role: 'admin' });
     const c = await client().post('/api/visits').send({ visitorName: 'A', hostUserId: host.id });
-    const res = await client().get(`/api/visits/${c.body.visit.id}/photo`);
+    const res = await client().get(`/api/visits/photo/${c.body.visit.publicToken}`);
     expect(res.status).toBe(404);
   });
 
-  test('404 on unknown visit', async () => {
-    const res = await client().get('/api/visits/99999/photo');
+  test('404 on unknown token', async () => {
+    const res = await client().get('/api/visits/photo/' + 'a'.repeat(64));
     expect(res.status).toBe(404);
+  });
+
+  test('rejects non-PNG bytes (magic-byte check)', async () => {
+    setSetting('photo.enabled', true);
+    const host = createUser({ username: 'h', role: 'admin' });
+    // Junk base64 — decodes to ascii, no PNG signature.
+    const junk = Buffer.from('not a png at all, just text bytes here').toString('base64');
+    const res = await client().post('/api/visits').send({
+      visitorName: 'A', hostUserId: host.id, photoPngBase64: junk,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid photo PNG/);
   });
 });
 

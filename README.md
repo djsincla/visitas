@@ -10,7 +10,7 @@ For a higher-level overview of what the project is, who it's for, and what it de
 
 ## Status
 
-**1.0.0 — first stable release.** The v0 roadmap is complete. The entire feature set (kiosk sign-in, active visitors, wall view, security role, host notifications, multi-iPad with AirPrint badges, NDA + safety with drawn signature, returning-visitor pre-fill with 1-year NDA cache, pre-registration via QR, opt-in photo capture with 30-day retention, and Active Directory host lookup) is shipped and packaged as `1.0.0`. The HTTP API and the `001`–`007` migration sequence are now considered the 1.x contract; additive changes only. See [CHANGELOG.md](CHANGELOG.md) and the [project site](https://djsincla.github.io/visitas/).
+**1.1.0 — security pass.** Public badge + photo endpoints are now token-keyed (no longer enumerable by visit id), PNG uploads are validated by magic-byte (no more arbitrary binary landing at `.png` paths), and `/api/auth/login` + `/api/visits/:id/sign-out` are rate-limited (10/min/IP). Minor breaking change to the public API: `/api/visits/:id/badge` and `/api/visits/:id/photo` moved to `/api/visits/badge/:token` and `/api/visits/photo/:token`. See [CHANGELOG.md](CHANGELOG.md) for migration notes.
 
 ## Contents
 
@@ -342,11 +342,11 @@ On first AD login, visitas creates a `users` row with `source='ad'`, `role='admi
 - `PATCH /:slug` (admin) — `{ name?, defaultPrinterName?, active? }`.
 - `DELETE /:slug` (admin) — soft-deactivate. Refuses on `default`.
 
-### Printable badge — `/api/visits/:id/badge`
-- `GET /` — **public** — standalone printable HTML, sized for 4×3 inch label, auto-fires `window.print()`. Includes the visitor's photo when present.
+### Printable badge — `/api/visits/badge/:token`
+- `GET /` — **public, token-keyed** — standalone printable HTML, sized for 4×3 inch label, auto-fires `window.print()`. Includes the visitor's photo when present. The 64-hex `publicToken` comes back on the `POST /api/visits` response and is what the kiosk uses for the reprint link.
 
-### Photo — `/api/visits/:id/photo`
-- `GET /` — **public** — serves the captured PNG when present (returns 404 after the 30-day retention sweep purges it, or for visits where no photo was captured).
+### Photo — `/api/visits/photo/:token`
+- `GET /` — **public, token-keyed** — serves the captured PNG when present (returns 404 after the 30-day retention sweep purges it, or for visits where no photo was captured). Same `:token` as the badge; sequential ids alone won't fetch.
 
 ### Documents — `/api/documents`
 - `GET /active` — **public, sanitized** — `{ documents: [{ id, kind, version, title, body }] }`. Used by the kiosk to render NDA + safety screens.

@@ -4,6 +4,7 @@ import { db } from '../db/index.js';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { getSetting } from './settings.js';
+import { assertPng } from './png.js';
 
 const PHOTO_DIR = resolve(config.dataDir, 'photos');
 const RETENTION_DAYS = 30;
@@ -22,6 +23,7 @@ export function storePhoto({ visitId, photoPngBase64 }) {
   mkdirSync(PHOTO_DIR, { recursive: true });
   const cleaned = photoPngBase64.replace(/^data:image\/png;base64,/, '');
   const buf = Buffer.from(cleaned, 'base64');
+  assertPng(buf, 'invalid photo PNG');
   const file = `visit-${visitId}.png`;
   writeFileSync(resolve(PHOTO_DIR, file), buf);
   const relPath = `photos/${file}`;
