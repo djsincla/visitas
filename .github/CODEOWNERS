@@ -1,0 +1,9 @@
+# visitas.world code owners.
+#
+# A single owner for the whole repo. GitHub auto-assigns this as the
+# default reviewer on any pull request and surfaces the user in the
+# "owners" UI. Solo project: ownership is unambiguous.
+#
+# Pattern docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+* @djsincla

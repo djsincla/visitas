@@ -11,6 +11,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Default-deny on the GITHUB_TOKEN scope. Jobs that need write access
+# must request it explicitly via a per-job `permissions:` block. None of
+# the current jobs (test / e2e / docker) write anything back to the
+# repo, so contents:read is sufficient for the whole workflow.
+permissions:
+  contents: read
+
 # Force the runner to execute JS-based actions on Node 24 instead of the
 # default Node 20 runtime. The action *versions* (checkout/setup-node/
 # upload-artifact @v5) still ship Node 20 internally — only the action
