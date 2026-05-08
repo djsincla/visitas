@@ -10,7 +10,7 @@ For a higher-level overview of what the project is, who it's for, and what it de
 
 ## Status
 
-**1.1.0 — security pass.** Public badge + photo endpoints are now token-keyed (no longer enumerable by visit id), PNG uploads are validated by magic-byte (no more arbitrary binary landing at `.png` paths), and `/api/auth/login` + `/api/visits/:id/sign-out` are rate-limited (10/min/IP). Minor breaking change to the public API: `/api/visits/:id/badge` and `/api/visits/:id/photo` moved to `/api/visits/badge/:token` and `/api/visits/photo/:token`. See [CHANGELOG.md](CHANGELOG.md) for migration notes.
+**1.2.0 — visitor bans.** Admins and security can ban visitors (by visitor record, email, or name + optional company). Banned sign-ins are refused at the kiosk with a generic &ldquo;please see reception&rdquo; message, audited, and trigger an email + SMS to all on-duty admin/security so the floor team can intercept the visitor at the door. Bans beat invitations. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Contents
 
@@ -28,6 +28,7 @@ For a higher-level overview of what the project is, who it's for, and what it de
 - [NDA + safety briefing](#nda--safety-briefing)
 - [Pre-registration via QR](#pre-registration-via-qr)
 - [Photo capture (opt-in)](#photo-capture-opt-in)
+- [Visitor bans](#visitor-bans)
 - [Active Directory](#active-directory)
 - [API reference (v0.9)](#api-reference-v09)
 - [Development](#development)
@@ -261,6 +262,24 @@ Enabled via **Admin → Settings → Photo capture** (default off; privacy is op
 
 **Camera access requires HTTPS** in production — see the [HTTPS for the kiosk](#https-for-the-kiosk-production) section above before flipping the toggle on a deployed iPad.
 
+## Visitor bans
+
+Admin and security users (both roles) can ban visitors via **Admin → Bans**, or directly from the Visitors / Active Visitors page row actions. Three match modes:
+
+- **By visitor record** (most specific) — for a returning visitor with a known email, bans them across all sign-in variants. Even falls back to name + company match if they reappear without their email.
+- **By email** (case-insensitive exact) — useful before they ever sign in (they have no visitor record yet).
+- **By name + company** (case-insensitive substring) — last-resort match for emailless walk-ins.
+
+Each ban requires a **reason** (text, audit-log only — never shown to the visitor) and optionally an **expiry** (`expires_at`; lazy-expired on read). Bans can be **lifted** (with optional lift reason).
+
+When a banned visitor tries to sign in:
+1. The kiosk shows a generic refusal: *&ldquo;Sign-in not permitted. Please see reception.&rdquo;* The visitor never sees the reason or knows which match fired.
+2. The server writes an `audit_log` row with action `visit_signin_blocked` and the matched ban id.
+3. A `signin_blocked` notification fires (email + SMS) to all active admin + security users so reception can intercept at the door.
+4. The visit row is **not** inserted; pre-registration invitations are **not** marked used.
+
+Bans beat invitations: a pre-registered visitor on the deny list is still refused.
+
 ## Active Directory
 
 AD is opt-in via `config/auth.json`. With `auth.ad.enabled = true` and the bind password supplied via the `AD_BIND_PASSWORD` env var, login attempts that don't match a local user fall through to LDAP:
@@ -298,7 +317,7 @@ On first AD login, visitas creates a `users` row with `source='ad'`, `role='admi
 
 `POST /api/auth/change-password` refuses for `source='ad'` accounts (returns 400 with `"AD-authenticated users must change password in AD"`) — those accounts have no local password to change.
 
-## API reference (v0.9)
+## API reference (v1.2)
 
 `GET /api` returns a live endpoint index.
 
@@ -326,6 +345,13 @@ On first AD login, visitas creates a `users` row with `source='ad'`, `role='admi
 
 ### Hosts (kiosk typeahead) — `/api/hosts`
 - `GET /` — **public, sanitized** — `{ hosts: [{ id, displayName }] }`. Filtered to active `role=admin` users (security users are not hosts). Used by the kiosk's host typeahead.
+
+### Visitor bans — `/api/bans` (admin + security)
+- `GET /` — list all bans (or `?status=active|inactive` to filter).
+- `GET /:id` — single ban.
+- `POST /` — `{ mode, ...matchFields, reason, expiresAt? }`. `mode` is one of `'visitor'|'email'|'name'`. Match-field requirements depend on mode (`visitorId` for `visitor`, `email` for `email`, `namePattern` + optional `companyPattern` for `name`).
+- `POST /:id/lift` — `{ liftReason? }`. Soft-lifts the ban; record is preserved for audit.
+- A banned-attempt sign-in produces a 403 from `POST /api/visits` with the message `Sign-in not permitted. Please see reception.` (the kiosk shows this verbatim; the reason is intentionally not leaked).
 
 ### Notification test endpoints (admin)
 - `POST /api/settings/email/test` — `{ to }` → sends a test email through the configured SMTP. 400 if disabled.

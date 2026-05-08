@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api.js';
+import BanModal from '../components/BanModal.jsx';
 
 export default function ActiveVisitors() {
   const qc = useQueryClient();
@@ -16,6 +17,7 @@ export default function ActiveVisitors() {
   });
 
   const [confirming, setConfirming] = useState(null);
+  const [banTarget, setBanTarget] = useState(null);
 
   return (
     <>
@@ -69,7 +71,20 @@ export default function ActiveVisitors() {
                         <button className="secondary" onClick={() => setConfirming(null)}>Cancel</button>
                       </span>
                     ) : (
-                      <button className="secondary" onClick={() => setConfirming(v.id)}>Force sign out</button>
+                      <span className="row">
+                        <button className="secondary" onClick={() => setConfirming(v.id)}>Force sign out</button>
+                        <button
+                          className="secondary"
+                          onClick={() => setBanTarget({
+                            visitorId: v.visitor?.id,
+                            visitorName: v.visitorName,
+                            company: v.company,
+                            email: v.email,
+                          })}
+                        >
+                          Ban
+                        </button>
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -77,6 +92,14 @@ export default function ActiveVisitors() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {banTarget && (
+        <BanModal
+          prefill={banTarget}
+          onClose={() => setBanTarget(null)}
+          onSaved={() => { setBanTarget(null); qc.invalidateQueries({ queryKey: ['visits', 'on_site'] }); }}
+        />
       )}
     </>
   );

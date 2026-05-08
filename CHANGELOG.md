@@ -4,6 +4,63 @@ All notable changes to visitas.world are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses semantic versioning.
 
+## [1.2.0] — 2026-05-08
+
+Visitor bans / denylist. Admins and security users on the floor can now
+ban a visitor — by visitor record (most specific), by email
+(case-insensitive exact), or by name + optional company (substring). When
+a banned visitor tries to sign in, the kiosk refuses with a generic
+&ldquo;Sign-in not permitted, please see reception&rdquo; (the reason is
+never shown to the visitor, only kept for the audit log + admin UI), and
+all on-duty admin + security users get an email + SMS so reception can
+intercept the visitor at the door.
+
+### Added
+- **Migration 009**: `visitor_bans` table with three match modes
+  (`visitor` / `email` / `name`), required `reason`, optional `expires_at`
+  (lazy-expired on read like invitations), and full audit fields
+  (`created_by_user_id`, `lifted_by_user_id`, `lifted_at`, `lift_reason`).
+- **`services/bans.js`** — `createBan`, `liftBan`, `listAll`,
+  `matchActiveBan(context)`. Match logic is intentionally layered: visitor-
+  by-id is most specific, then by-name fallback (so a banned-by-record
+  visitor who comes back without an email is still caught if their name
+  + company match the banned visitor record), then by-email exact, then
+  by-name + optional company substring.
+- **`POST /api/bans`** + **`GET /api/bans`** + **`POST /api/bans/:id/lift`**
+  — admin **and security** can both manage bans. Security is on the floor
+  and most likely to make the call.
+- **Visit-creation ban gate** in `services/visits.js > createVisit`. Runs
+  *before* the visit row is inserted; blocked attempts get a 403 with a
+  generic message, an `audit_log` row with action `visit_signin_blocked`
+  + the matched ban id, and a fire-and-forget `signin_blocked` notification
+  to all active admin + security users (email + SMS, per-channel events
+  filter respected). Bans beat invitations: a pre-registered visitor on
+  the deny list is still refused, and the invitation is **not** marked
+  used.
+- **Admin Bans page** at `/admin/bans` — visible to admin and security.
+  Lists active bans by default; toggle to include lifted/expired. Each
+  row has a Lift control with a free-form reason.
+- **Ban modal** (`web/src/components/BanModal.jsx`) — shared by the
+  Bans page (manual create), the Visitors page (per-row Ban button), and
+  the Active Visitors page (Ban alongside Force sign out). Pre-fills
+  intelligently from whatever record opened it; admin can flip the
+  match mode.
+- **`signin_blocked` notification event** in `notifications/index.js`.
+  Fires email + SMS to all active admin + security users with a body
+  that names the visitor + company + email + intended host + ban
+  reason, so reception knows who to intercept.
+- **Topbar gains `Bans` link** for both admin and security roles.
+
+### Internal
+- 185 → 203 vitest server tests covering: ban service CRUD + lazy-expire
+  + lift transitions; match logic per mode (email, name, name+company,
+  visitor-by-id, by-name fallback); visit-creation 403 + audit row +
+  invitation not-marked-used; admin AND security can both manage bans
+  via the API.
+- New `.modal-backdrop` + `.modal` styles in `web/src/styles.css` for
+  the shared modal pattern (BanModal is the first user; future modals
+  will reuse).
+
 ## [1.1.0] — 2026-05-07
 
 Security pass. Three findings from the 1.0.1 code review, all fixed:

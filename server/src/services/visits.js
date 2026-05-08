@@ -8,6 +8,8 @@ import { sendVisitorNdaCopy } from '../notifications/visitorNda.js';
 import { findOrCreateByEmail, computeNdaCache } from './visitors.js';
 import { getByToken as getInvitation, markUsed as markInvitationUsed } from './invitations.js';
 import { storePhoto, photoEnabled } from './photo.js';
+import { matchActiveBan } from './bans.js';
+import { notifySigninBlockedAsync } from '../notifications/index.js';
 
 const VISIT_SQL = `
   SELECT v.*,
@@ -34,6 +36,41 @@ export function createVisit({
     hostUserId = invitation.host.id;
     if (invitation.kiosk) kioskSlug = invitation.kiosk.slug;
     if (!email) email = invitation.email;
+  }
+
+  // Ban check runs BEFORE we touch the visits table — a banned sign-in
+  // never produces a row. The visitor_id lookup happens later for cache
+  // purposes, but for the ban gate we look up by email only at this stage
+  // (ban-by-visitor with a not-yet-resolved visitor still works via the
+  // by-name fallback inside matchActiveBan).
+  let banContextVisitorId = null;
+  if (email) {
+    const v = db.prepare('SELECT id FROM visitors WHERE LOWER(email) = LOWER(?)').get(email);
+    banContextVisitorId = v?.id ?? null;
+  }
+  const matchedBan = matchActiveBan({
+    visitorId: banContextVisitorId,
+    email,
+    visitorName,
+    company,
+  });
+  if (matchedBan) {
+    recordAudit({
+      action: 'visit_signin_blocked',
+      subjectType: 'visitor_ban',
+      subjectId: matchedBan.id,
+      details: {
+        visitorName, company, email,
+        intendedHostUserId: hostUserId ?? null,
+        kioskSlug: kioskSlug ?? null,
+        banMode: matchedBan.mode,
+      },
+    });
+    notifySigninBlockedAsync({
+      ban: matchedBan,
+      attempt: { visitorName, company, email, kioskSlug },
+    });
+    throw httpError(403, 'Sign-in not permitted. Please see reception.');
   }
 
   const host = db.prepare("SELECT id, role, active FROM users WHERE id = ?").get(hostUserId);

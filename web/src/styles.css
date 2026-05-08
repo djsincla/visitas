@@ -244,6 +244,24 @@ tbody tr:hover { background: var(--panel-2); }
 .signature-pad.disabled { opacity: 0.5; cursor: not-allowed; }
 .signature-pad-actions { margin-top: 6px; display: flex; align-items: center; gap: 12px; }
 
+/* Modal backdrop (BanModal etc.) */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+.modal {
+  max-width: 560px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
 /* Theme picker on Settings */
 .theme-picker { display: flex; flex-direction: column; gap: 8px; max-width: 360px; }
 .theme-option {

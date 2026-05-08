@@ -1,7 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api.js';
+import BanModal from '../components/BanModal.jsx';
 
 export default function Visitors() {
+  const qc = useQueryClient();
+  const [banTarget, setBanTarget] = useState(null);
   const { data, isLoading } = useQuery({
     queryKey: ['visitors'],
     queryFn: () => api.get('/api/visitors'),
@@ -33,6 +37,7 @@ export default function Visitors() {
                 <th style={{ textAlign: 'right' }}>Visits</th>
                 <th>Last seen</th>
                 <th>NDA on file</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -49,11 +54,27 @@ export default function Visitors() {
                       ? <span className="badge muted" title={`v${v.ndaCacheVersion} signed ${v.ndaCacheAcknowledgedAt}`}>v{v.ndaCacheVersion} fresh</span>
                       : <span className="muted" style={{ fontSize: 12 }}>—</span>}
                   </td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button
+                      className="secondary"
+                      onClick={() => setBanTarget({ visitorId: v.id, visitorName: v.name, company: v.company, email: v.email })}
+                    >
+                      Ban
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {banTarget && (
+        <BanModal
+          prefill={banTarget}
+          onClose={() => setBanTarget(null)}
+          onSaved={() => { setBanTarget(null); qc.invalidateQueries({ queryKey: ['visitors'] }); }}
+        />
       )}
     </>
   );

@@ -49,6 +49,63 @@ export function notifyVisitEventAsync(event, payload) {
   });
 }
 
+/**
+ * Banned sign-in attempt → email + SMS to all active admin + security
+ * users so the floor team can intercept the visitor at the door. Uses the
+ * same per-channel events filter (event name 'signin_blocked').
+ *
+ * Best-effort: failures logged, never propagated.
+ */
+export async function notifySigninBlocked({ ban, attempt }) {
+  if (!emailEnabled() && !smsEnabled()) return;
+
+  const recipients = db.prepare(`
+    SELECT id, email, phone, display_name, username
+    FROM users
+    WHERE active = 1 AND role IN ('admin','security')
+  `).all();
+  if (recipients.length === 0) return;
+
+  const subject = `[visitas.world] Banned sign-in attempt — ${attempt.visitorName ?? 'unknown'}`;
+  const body = [
+    `A banned sign-in attempt was just blocked at the kiosk.`,
+    '',
+    `Visitor: ${attempt.visitorName ?? '—'}${attempt.company ? ` (${attempt.company})` : ''}`,
+    `Email: ${attempt.email ?? '—'}`,
+    `Kiosk: ${attempt.kioskSlug ?? 'default'}`,
+    '',
+    `Ban id: ${ban.id} (mode: ${ban.mode})`,
+    `Reason: ${ban.reason}`,
+    '',
+    `Reception: please intercept the visitor and explain politely.`,
+  ].join('\n');
+
+  const tasks = [];
+  for (const r of recipients) {
+    if (emailEnabled() && wantsChannel('email', 'signin_blocked') && r.email) {
+      tasks.push(
+        sendEmail({ to: r.email, subject, text: body })
+          .catch(err => logger.error({ err: err.message, userId: r.id }, 'signin_blocked email failed'))
+      );
+    }
+    if (smsEnabled() && wantsChannel('sms', 'signin_blocked') && r.phone) {
+      tasks.push(
+        sendSms({ to: r.phone, body: `${subject}\n${attempt.visitorName ?? '—'} blocked at ${attempt.kioskSlug ?? 'default'} kiosk` })
+          .catch(err => logger.error({ err: err.message, userId: r.id }, 'signin_blocked sms failed'))
+      );
+    }
+  }
+  await Promise.allSettled(tasks);
+}
+
+export function notifySigninBlockedAsync(payload) {
+  setImmediate(() => {
+    notifySigninBlocked(payload).catch(err => {
+      logger.error({ err: err.message }, 'signin_blocked dispatch failed');
+    });
+  });
+}
+
 function loadHost(visit) {
   // Service layer returns visit.host = { id, username, displayName }, but
   // we also want email + phone for delivery. Re-query when present.
