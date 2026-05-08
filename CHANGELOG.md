@@ -4,6 +4,61 @@ All notable changes to visitas.world are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses semantic versioning.
 
+## [1.3.0] — 2026-05-08
+
+Operational hardening pass. Four small-but-load-bearing improvements that
+came out of the v1.0 senior-developer code review and that we want in
+place before iPad trial: a notifications failure log so missing
+host-emails are debuggable, a configurable photo retention window so
+workshops with strict privacy needs can shorten the default 30 days, an
+admins-only mode for the `/active` wall view for sites with sensitive
+client work, and a single `npm run preflight` script that runs everything
+CI runs.
+
+### Added
+- **Migration 010**: `notifications_log` table — every email + SMS dispatch
+  attempt writes a row with status `pending` → `sent` | `failed` plus the
+  transport error message on failure. Indexed by created\_at, status, and
+  event. `email.js`, `sms.js`, and `invitationEmail.js` were threaded
+  through the pending → sent | failed lifecycle so the operator finally has
+  a debug surface when the workshop says &ldquo;Mike isn&rsquo;t getting
+  his SMS.&rdquo;
+- **`GET /api/notifications-log`** (admin only) — recent dispatch attempts
+  with optional `?status=` and `?event=` filters, default limit 100.
+  Surfaced in the admin Settings page as a &ldquo;Notifications log&rdquo;
+  panel that auto-refreshes every 60 seconds.
+- **Configurable photo retention** — `setting:photo.retention_days` (default
+  30, range 1&ndash;365). The daily sweep reads the setting on every run, so
+  changes take effect at the next sweep without restart. Admin Settings page
+  has a &ldquo;Photo retention&rdquo; section to edit it.
+- **Wall-view privacy toggle** — `setting:wall_view.public` (default true).
+  When flipped to false, `GET /api/visits/active` requires an admin or
+  security session cookie. The web wall view at `/active` shows a
+  friendly &ldquo;Sign-in required&rdquo; message in that mode instead of
+  failing silently. Workshops that host clients with NDA-sensitive
+  presence flip this off.
+- **`npm run preflight`** — root script that runs `npm test`, `npm run
+  build`, and `npm run test:e2e` in sequence. Mirrors what CI runs;
+  intended for &ldquo;before push&rdquo;.
+
+### Changed
+- `services/photo.js > purgeExpiredPhotos` reads retention from
+  settings each call instead of using a module-level `RETENTION_DAYS`
+  constant. Consuming code unchanged; default behavior unchanged.
+- `notifications/index.js` (host notifications) and the
+  `signin_blocked` dispatcher now pass `event` through to `sendEmail` /
+  `sendSms` so log rows are tagged with a meaningful event name.
+
+### Notes
+- Notifications log rows are kept indefinitely for now &mdash; a sweep
+  can be added later if disk pressure becomes real (it won&rsquo;t for
+  small workshops at single-digit visits per day).
+- Wall-view auth is intentionally session-cookie based, not
+  token-keyed: workshops that need the hallway-iPad use case AND
+  privacy can either keep it public or park a long-lived security
+  session on the wall iPad. A signed-URL alternative is a v1.4 option
+  if the trade-off bites.
+
 ## [1.2.0] — 2026-05-08
 
 Visitor bans / denylist. Admins and security users on the floor can now

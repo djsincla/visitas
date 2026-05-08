@@ -211,6 +211,53 @@
 </section>
 
 <section class="block">
+  <h2>Since 1.0</h2>
+  <p class="muted" style="margin-bottom: 16px;">
+    Three minor releases of operational + safety hardening on top of the
+    1.0 stable line. Each is a single feature, a single minor bump, a single
+    CHANGELOG entry. No batch.
+  </p>
+
+  <div class="grid">
+
+    <article>
+      <h3>v1.1 — sign-in security</h3>
+      <p>
+        Token-keyed public endpoints (badge + photo URLs are unguessable
+        64-hex tokens, not sequential ids), PNG magic-byte validation on
+        signature + photo upload, login rate limiting. From the v1.0 senior
+        code review.
+      </p>
+      <p class="muted">Shipped.</p>
+    </article>
+
+    <article>
+      <h3>v1.2 — visitor bans</h3>
+      <p>
+        Admins and security users can ban visitors by record, by email,
+        or by name + company substring. Banned attempts get a generic
+        kiosk refusal, an audit row, and an email + SMS to all on-duty
+        admin / security so reception intercepts at the door.
+      </p>
+      <p class="muted">Shipped.</p>
+    </article>
+
+    <article>
+      <h3>v1.3 — operational hardening</h3>
+      <p>
+        Notifications failure log so missing host emails are debuggable,
+        configurable photo retention (1&ndash;365 days, default 30),
+        admins-only mode for the <code>/active</code> wall view for sites
+        with NDA-sensitive client work, and a single
+        <code>npm run preflight</code> that runs everything CI runs.
+      </p>
+      <p class="muted">Shipped.</p>
+    </article>
+
+  </div>
+</section>
+
+<section class="block">
   <h2>What it isn't</h2>
   <p>
     Honesty is part of the design. visitas.world <strong>is not</strong>:

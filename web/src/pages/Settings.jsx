@@ -62,7 +62,13 @@ export default function Settings() {
 
       <PhotoCaptureToggle />
 
+      <PhotoRetention />
+
+      <WallViewPrivacy />
+
       <NotificationTester />
+
+      <NotificationsLogPanel />
 
       <div className="panel">
         <h2>Branding</h2>
@@ -153,7 +159,7 @@ function PhotoCaptureToggle() {
       <h2>Photo capture</h2>
       <div className="muted" style={{ marginBottom: 8 }}>
         Visitors take a photo with the iPad&rsquo;s front camera at sign-in. The photo prints on their badge and is
-        stored against the visit record for <strong>30 days</strong>, then auto-purged. Off by default — privacy is opt-in.
+        stored against the visit record for the configured retention window (see Photo retention below), then auto-purged. Off by default — privacy is opt-in.
         Camera access requires HTTPS in production (browsers block it on plain http for non-localhost origins);
         plan your TLS cert before enabling on a deployed iPad.
       </div>
@@ -166,6 +172,139 @@ function PhotoCaptureToggle() {
         />
         <span>{enabled ? 'Enabled' : 'Disabled'}</span>
       </label>
+    </div>
+  );
+}
+
+function PhotoRetention() {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ['settings-photo-retention'],
+    queryFn: () => api.get('/api/settings/photo/retention'),
+  });
+  const [days, setDays] = useState('');
+  const current = data?.retentionDays ?? 30;
+  const editing = days !== '' && Number(days) !== current;
+
+  const m = useMutation({
+    mutationFn: (next) => fetch('/api/settings/photo/retention', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ retentionDays: Number(next) }),
+    }).then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j))),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['settings-photo-retention'] }); setDays(''); },
+  });
+
+  return (
+    <div className="panel">
+      <h2>Photo retention</h2>
+      <div className="muted" style={{ marginBottom: 8 }}>
+        Days a captured visitor photo is kept before the daily sweep deletes it. Default 30. Range 1&ndash;365.
+        Tighter settings reduce stored personal data; longer settings keep evidence for incident review.
+      </div>
+      <div className="row" style={{ alignItems: 'flex-end', gap: 8 }}>
+        <div>
+          <label htmlFor="retention-days">Retention days</label>
+          <input
+            id="retention-days"
+            type="number" min={1} max={365}
+            placeholder={String(current)}
+            value={days}
+            onChange={e => setDays(e.target.value)}
+            disabled={isLoading || m.isPending}
+            style={{ width: 120 }}
+          />
+        </div>
+        <button onClick={() => m.mutate(days)} disabled={!editing || m.isPending}>
+          {m.isPending ? 'Saving…' : 'Save'}
+        </button>
+        <span className="muted">currently {current} days</span>
+      </div>
+      {m.error && <div className="error" style={{ marginTop: 8 }}>{m.error.error || 'failed'}</div>}
+    </div>
+  );
+}
+
+function WallViewPrivacy() {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ['settings-wall-view'],
+    queryFn: () => api.get('/api/settings/wall-view'),
+  });
+  const isPublic = data?.public !== false;
+
+  const m = useMutation({
+    mutationFn: (next) => fetch('/api/settings/wall-view', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ public: next }),
+    }).then(r => r.json()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings-wall-view'] }),
+  });
+
+  return (
+    <div className="panel">
+      <h2>Wall-view privacy</h2>
+      <div className="muted" style={{ marginBottom: 8 }}>
+        Whether the <code>/active</code> wall view (currently-on-site visitors) is reachable without signing in. Public is the
+        default and supports the hallway-iPad / fire-roster use case. Switch to admins-only if your workshop hosts clients
+        whose presence is sensitive — once off, the wall iPad must be signed in as admin or security to display the list.
+      </div>
+      <label className="theme-option" style={{ display: 'flex', alignItems: 'center', gap: 10, maxWidth: 460 }}>
+        <input
+          type="checkbox"
+          checked={isPublic}
+          disabled={isLoading || m.isPending}
+          onChange={(e) => m.mutate(e.target.checked)}
+        />
+        <span>{isPublic ? 'Public — anyone on the LAN can view /active' : 'Admins/security only — sign-in required'}</span>
+      </label>
+    </div>
+  );
+}
+
+function NotificationsLogPanel() {
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['notifications-log'],
+    queryFn: () => api.get('/api/notifications-log?limit=20'),
+    refetchInterval: 60_000,
+  });
+  const entries = data?.entries ?? [];
+
+  return (
+    <div className="panel">
+      <h2>Notifications log <button style={{ marginLeft: 8 }} onClick={() => refetch()} disabled={isLoading}>Refresh</button></h2>
+      <div className="muted" style={{ marginBottom: 8 }}>
+        Last 20 email + SMS dispatch attempts. Use this to debug missing host notifications: a <strong>failed</strong> row
+        with an error message means the transport rejected the send (bad credentials, blocked recipient, etc).
+      </div>
+      {entries.length === 0 ? (
+        <div className="muted">No notification attempts logged yet.</div>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>When</th><th>Kind</th><th>Event</th><th>Recipient</th><th>Status</th><th>Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map(e => (
+              <tr key={e.id}>
+                <td title={e.createdAt}>{e.createdAt}</td>
+                <td>{e.kind}</td>
+                <td>{e.event}</td>
+                <td>{e.recipient}</td>
+                <td style={{ color: e.status === 'failed' ? 'var(--danger)' : e.status === 'sent' ? 'var(--success)' : undefined }}>
+                  {e.status}
+                </td>
+                <td className="muted" style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.error || ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

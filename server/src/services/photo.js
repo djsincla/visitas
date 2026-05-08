@@ -7,7 +7,13 @@ import { getSetting } from './settings.js';
 import { assertPng } from './png.js';
 
 const PHOTO_DIR = resolve(config.dataDir, 'photos');
-const RETENTION_DAYS = 30;
+const DEFAULT_RETENTION_DAYS = 30;
+
+function retentionDays() {
+  const v = getSetting('photo.retention_days');
+  const n = Number.isFinite(v) ? v : Number(v);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_RETENTION_DAYS;
+}
 
 export function photoEnabled() {
   return Boolean(getSetting('photo.enabled'));
@@ -48,7 +54,7 @@ export function purgeExpiredPhotos() {
     SELECT id, photo_path FROM visits
     WHERE photo_path IS NOT NULL
       AND datetime(signed_in_at) < datetime('now', '-' || ? || ' days')
-  `).all(RETENTION_DAYS);
+  `).all(retentionDays());
 
   let purged = 0;
   for (const r of rows) {

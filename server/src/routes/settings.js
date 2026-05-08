@@ -99,6 +99,51 @@ router.put('/photo', requireRole('admin'), (req, res) => {
   res.json({ enabled: parse.data.enabled });
 });
 
+// --- Photo retention (admin only) -----------------------------------------
+//
+// Days a visitor photo is kept before the daily sweep deletes it. Default 30.
+// 0/blank disables retention (kept indefinitely) — workshops with strict
+// privacy needs should keep it short; sites that need historical investigation
+// can extend it. Hard cap at 365 to keep the sqlite/data dir from drifting.
+
+const retentionSchema = z.object({
+  retentionDays: z.number().int().min(1).max(365),
+}).strict();
+
+router.get('/photo/retention', (_req, res) => {
+  const v = getSetting('photo.retention_days');
+  const n = Number(v);
+  res.json({ retentionDays: Number.isFinite(n) && n > 0 ? n : 30 });
+});
+
+router.put('/photo/retention', requireRole('admin'), (req, res) => {
+  const parse = retentionSchema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: 'invalid request', details: parse.error.flatten() });
+  setSetting('photo.retention_days', parse.data.retentionDays);
+  res.json({ retentionDays: parse.data.retentionDays });
+});
+
+// --- Wall-view privacy toggle (admin only) --------------------------------
+//
+// When `public` is true (default) the /active wall view is reachable without
+// auth — useful for hallway iPads and the fire-roster use case. When set to
+// false, /active requires an admin/security session cookie. Workshops that
+// host clients with NDA-sensitive presence flip this off.
+
+const wallViewSchema = z.object({ public: z.boolean() }).strict();
+
+router.get('/wall-view', (_req, res) => {
+  const v = getSetting('wall_view.public');
+  res.json({ public: v === false ? false : true });
+});
+
+router.put('/wall-view', requireRole('admin'), (req, res) => {
+  const parse = wallViewSchema.safeParse(req.body);
+  if (!parse.success) return res.status(400).json({ error: 'invalid request', details: parse.error.flatten() });
+  setSetting('wall_view.public', parse.data.public);
+  res.json({ public: parse.data.public });
+});
+
 // --- Notification test endpoints (admin only) -----------------------------
 
 const testEmailSchema = z.object({ to: z.string().email() }).strict();
@@ -116,6 +161,7 @@ router.post('/email/test', requireRole('admin'), async (req, res) => {
       subject: '[visitas.world] Test email',
       text: 'This is a test email from visitas.world. If you got this, your SMTP configuration is working.',
       html: '<p>This is a test email from <strong>visitas.world</strong>.</p><p>If you got this, your SMTP configuration is working.</p>',
+      event: 'test_email',
     });
     res.json({ ok: true });
   } catch (err) {
@@ -136,6 +182,7 @@ router.post('/sms/test', requireRole('admin'), async (req, res) => {
     await sendSms({
       to: parse.data.to,
       body: '[visitas.world] Test SMS — if you got this, your SMS adapter is working.',
+      event: 'test_sms',
     });
     res.json({ ok: true });
   } catch (err) {

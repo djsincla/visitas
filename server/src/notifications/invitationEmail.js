@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { emailEnabled } from './email.js';
+import { createPending, markSent, markFailed } from '../services/notificationsLog.js';
 
 let testOverride = null;
 
@@ -59,6 +60,7 @@ export async function sendInvitationEmail({ invitation, branding }) {
     auth: cfg.user ? { user: cfg.user, pass: config.smtpPassword } : undefined,
   });
 
+  const logId = createPending({ kind: 'email', event: 'invitation', recipient: invitation.email, subject });
   try {
     await transporter.sendMail({
       from: config.notifications.email.from,
@@ -73,8 +75,10 @@ export async function sendInvitationEmail({ invitation, branding }) {
         contentType: 'image/png',
       }] : [],
     });
+    markSent(logId);
     logger.info({ to: invitation.email, invitationId: invitation.id }, 'invitation email sent');
   } catch (err) {
+    markFailed(logId, err);
     logger.error({ err: err.message, invitationId: invitation.id }, 'invitation email failed');
   }
 }

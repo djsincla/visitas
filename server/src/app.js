@@ -16,6 +16,7 @@ import documentsRouter from './routes/documents.js';
 import visitorsRouter from './routes/visitors.js';
 import invitationsRouter from './routes/invitations.js';
 import bansRouter from './routes/bans.js';
+import notificationsLogRouter from './routes/notificationsLog.js';
 
 /**
  * Build an Express app instance. Migrations and admin bootstrap are NOT
@@ -33,10 +34,10 @@ export function createApp({ httpLogger = true } = {}) {
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
 
-  app.get('/api/health', (_req, res) => res.json({ ok: true, version: '1.2.0' }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, version: '1.3.0' }));
   app.get('/api', (_req, res) => res.json({
     name: 'visitas',
-    version: '1.2.0',
+    version: '1.3.0',
     endpoints: [
       'POST /api/auth/login',
       'POST /api/auth/logout',
@@ -79,6 +80,13 @@ export function createApp({ httpLogger = true } = {}) {
       'GET  /api/bans (admin or security)',
       'POST /api/bans (admin or security)',
       'POST /api/bans/:id/lift (admin or security)',
+      'GET  /api/settings/photo (admin)',
+      'PUT  /api/settings/photo (admin)',
+      'GET  /api/settings/photo/retention (admin)',
+      'PUT  /api/settings/photo/retention (admin)',
+      'GET  /api/settings/wall-view (admin)',
+      'PUT  /api/settings/wall-view (admin)',
+      'GET  /api/notifications-log (admin)',
     ],
   }));
 
@@ -93,6 +101,7 @@ export function createApp({ httpLogger = true } = {}) {
   app.use('/api/visitors', visitorsRouter);
   app.use('/api/invitations', invitationsRouter);
   app.use('/api/bans', bansRouter);
+  app.use('/api/notifications-log', notificationsLogRouter);
 
   // Serve uploaded files (logos etc.) — no auth required because the logo is public branding.
   // fallthrough:false so missing files return 404 instead of falling into the SPA catch-all.

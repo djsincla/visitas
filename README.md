@@ -29,8 +29,10 @@ For a higher-level overview of what the project is, who it's for, and what it de
 - [Pre-registration via QR](#pre-registration-via-qr)
 - [Photo capture (opt-in)](#photo-capture-opt-in)
 - [Visitor bans](#visitor-bans)
+- [Notifications log](#notifications-log)
+- [Wall-view privacy](#wall-view-privacy)
 - [Active Directory](#active-directory)
-- [API reference (v0.9)](#api-reference-v09)
+- [API reference (v1.3)](#api-reference-v13)
 - [Development](#development)
 - [Testing](#testing)
 - [License](#license)
@@ -258,7 +260,7 @@ On arrival the visitor opens the link (or scans the QR with their iPhone camera,
 
 Enabled via **Admin → Settings → Photo capture** (default off; privacy is opt-in). When on, the kiosk inserts a Photo stage between the form and the safety briefing — front-facing camera preview, Take photo / Retake / Use this photo flow. The photo prints on the badge as a 28×28 mm right-floated image and is stored at `data/photos/visit-{id}.png`.
 
-**Retention**: photos are auto-purged 30 days after sign-in by a sweep that runs on server boot and every 24 hours after. Visit rows stay (audit), but `photo_path` gets nulled and the file deleted. Adjust the constant in `server/src/services/photo.js` if your jurisdiction requires a different window.
+**Retention**: photos are auto-purged after the configured window (default 30 days) by a sweep that runs on server boot and every 24 hours after. Visit rows stay (audit), but `photo_path` gets nulled and the file deleted. Tune via **Admin → Settings → Photo retention** (range 1&ndash;365 days) — or `PUT /api/settings/photo/retention` if you&rsquo;re scripting deployment.
 
 **Camera access requires HTTPS** in production — see the [HTTPS for the kiosk](#https-for-the-kiosk-production) section above before flipping the toggle on a deployed iPad.
 
@@ -279,6 +281,33 @@ When a banned visitor tries to sign in:
 4. The visit row is **not** inserted; pre-registration invitations are **not** marked used.
 
 Bans beat invitations: a pre-registered visitor on the deny list is still refused.
+
+## Notifications log
+
+Every email + SMS dispatch attempt writes a row to `notifications_log` with
+status `pending` &rarr; `sent` | `failed`. When SMTP rejects auth, when Twilio
+returns `21610 unsubscribed`, or when the host email is dead, the failure
+shows up here with the transport&rsquo;s error message.
+
+View it under **Admin &rarr; Settings &rarr; Notifications log** (last 20,
+auto-refresh every 60s) or hit `GET /api/notifications-log?limit=100&status=failed`
+directly. It is the operator&rsquo;s only window into delivery health when the
+workshop says &ldquo;Mike isn&rsquo;t getting his SMS.&rdquo;
+
+The log is admin-only (`security` role doesn&rsquo;t see it) and currently
+retained indefinitely &mdash; sweep job will be added when disk pressure
+becomes real.
+
+## Wall-view privacy
+
+The `/active` wall view (currently-on-site visitors) is public by default,
+which keeps the hallway-iPad / fire-roster use case working without a login.
+Workshops that host clients with NDA-sensitive presence can flip
+**Admin &rarr; Settings &rarr; Wall-view privacy** to admins/security only;
+once off, `GET /api/visits/active` requires a session cookie and the wall
+view shows &ldquo;Sign-in required&rdquo; until someone authenticates on that
+iPad. Trade-off: a hallway iPad in privacy mode must be parked on a
+long-lived security session, or replaced with a printed sheet.
 
 ## Active Directory
 
@@ -317,7 +346,7 @@ On first AD login, visitas creates a `users` row with `source='ad'`, `role='admi
 
 `POST /api/auth/change-password` refuses for `source='ad'` accounts (returns 400 with `"AD-authenticated users must change password in AD"`) — those accounts have no local password to change.
 
-## API reference (v1.2)
+## API reference (v1.3)
 
 `GET /api` returns a live endpoint index.
 
@@ -335,7 +364,7 @@ On first AD login, visitas creates a `users` row with `source='ad'`, `role='admi
 
 ### Visits — `/api/visits`
 - `POST /` — **public, no auth** — `{ visitorName, hostUserId, company?, email?, phone?, purpose?, fields? }`. Trust-the-LAN; the kiosk surface is unauthenticated.
-- `GET /active` — **public, sanitized** — list of currently on-site visits with `{ id, visitorName, hostName, signedInAt }`. Used by the wall view at `/active`.
+- `GET /active` — **sanitized** — list of currently on-site visits with `{ id, visitorName, hostName, signedInAt }`. Used by the wall view at `/active`. **Public by default**; admin/security session cookie required when `setting:wall_view.public` is `false`.
 - `POST /:id/sign-out` — visitor self-sign-out when called without auth (`signed_out_method='kiosk'`); admin/security force sign-out when called with a session cookie (`signed_out_method='admin'`, audit row records the actor).
 - `GET /` — admin or security — full list with all fields, supports `?status=on_site|signed_out`.
 - `GET /:id` — admin or security — single visit with all fields.
@@ -361,6 +390,17 @@ On first AD login, visitas creates a `users` row with `source='ad'`, `role='admi
 - `GET /` — `{ enabled }`.
 - `PUT /` (admin) — `{ enabled: bool }` to flip the photo-capture channel on/off.
 
+### Photo retention — `/api/settings/photo/retention`
+- `GET /` — `{ retentionDays }` (default 30).
+- `PUT /` (admin) — `{ retentionDays: 1..365 }`. Takes effect on the next sweep tick — no restart needed.
+
+### Wall-view privacy — `/api/settings/wall-view`
+- `GET /` — `{ public }` (default true).
+- `PUT /` (admin) — `{ public: bool }`. When `false`, `GET /api/visits/active` requires admin or security auth.
+
+### Notifications log — `/api/notifications-log` (admin)
+- `GET /` — recent dispatch attempts. Optional `?status=pending|sent|failed`, `?event=signed_in`, `?limit=` (default 100, max 500). Each entry: `{ id, kind, event, recipient, subject, status, error, createdAt, sentAt }`.
+
 ### Kiosks — `/api/kiosks`
 - `GET /:slug` — **public, sanitized** — `{ kiosk: { slug, name, defaultPrinterName } }`. The kiosk SPA reads this on load.
 - `GET /` — admin — full list incl. timestamps + active flag.
@@ -372,7 +412,7 @@ On first AD login, visitas creates a `users` row with `source='ad'`, `role='admi
 - `GET /` — **public, token-keyed** — standalone printable HTML, sized for 4×3 inch label, auto-fires `window.print()`. Includes the visitor's photo when present. The 64-hex `publicToken` comes back on the `POST /api/visits` response and is what the kiosk uses for the reprint link.
 
 ### Photo — `/api/visits/photo/:token`
-- `GET /` — **public, token-keyed** — serves the captured PNG when present (returns 404 after the 30-day retention sweep purges it, or for visits where no photo was captured). Same `:token` as the badge; sequential ids alone won't fetch.
+- `GET /` — **public, token-keyed** — serves the captured PNG when present (returns 404 after the configured retention sweep purges it, or for visits where no photo was captured). Same `:token` as the badge; sequential ids alone won't fetch.
 
 ### Documents — `/api/documents`
 - `GET /active` — **public, sanitized** — `{ documents: [{ id, kind, version, title, body }] }`. Used by the kiosk to render NDA + safety screens.
@@ -416,6 +456,7 @@ npm run dev      # server (3000) + web (5173) with hot reload
 npm test         # server tests (vitest)
 npm run test:e2e # Playwright E2E (uses port 3500)
 npm run build    # build the SPA into web/dist/ for npm start
+npm run preflight # everything CI runs (server tests + build + e2e) — run before push
 ```
 
 ## Testing

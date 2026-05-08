@@ -10,6 +10,7 @@ import {
 } from '../services/visits.js';
 import { renderBadge } from '../services/badge.js';
 import { photoFileFor } from '../services/photo.js';
+import { getSetting } from '../services/settings.js';
 
 const router = Router();
 
@@ -69,8 +70,18 @@ router.post('/', (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Public, sanitized — wall view at /active reads this.
+// Sanitized active-list — wall view at /active reads this. Public by default;
+// when admins flip the wall_view.public setting off (workshops doing sensitive
+// client work), the endpoint requires an admin/security session cookie.
 router.get('/active', (req, res) => {
+  const isPublic = getSetting('wall_view.public');
+  if (isPublic === false) {
+    const callerId = tryIdentifyUser(req);
+    const ok = callerId
+      ? db.prepare("SELECT 1 AS ok FROM users WHERE id = ? AND role IN ('admin','security') AND active = 1").get(callerId)?.ok
+      : null;
+    if (!ok) return res.status(401).json({ error: 'wall view requires sign-in' });
+  }
   const kioskSlug = req.query.kiosk || null;
   const visits = listActive({ kioskSlug }).map(sanitizeForWall);
   res.json({ visits, asOf: new Date().toISOString() });

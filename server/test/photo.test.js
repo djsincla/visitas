@@ -111,6 +111,37 @@ describe('Retention sweep (30-day purge)', () => {
     const purged = purgeExpiredPhotos();
     expect(purged).toBe(0);
   });
+
+  test('respects configured retention_days (7-day window purges a 10-day-old photo, 30-day default would not)', async () => {
+    setSetting('photo.enabled', true);
+    setSetting('photo.retention_days', 7);
+    const host = createUser({ username: 'h', role: 'admin' });
+    const c = await client().post('/api/visits').send({
+      visitorName: 'A', hostUserId: host.id, photoPngBase64: TINY_PNG,
+    });
+    db.prepare("UPDATE visits SET signed_in_at = datetime('now', '-10 days') WHERE id = ?").run(c.body.visit.id);
+
+    expect(purgeExpiredPhotos()).toBe(1);
+  });
+});
+
+describe('Photo retention setting endpoint', () => {
+  beforeEach(resetDb);
+
+  test('admin can read + update; PUT validates range', async () => {
+    const a = await adminAgent();
+    const r1 = await a.get('/api/settings/photo/retention');
+    expect(r1.body).toEqual({ retentionDays: 30 });
+
+    const r2 = await a.put('/api/settings/photo/retention').send({ retentionDays: 14 });
+    expect(r2.status).toBe(200);
+    expect(r2.body).toEqual({ retentionDays: 14 });
+
+    const r3 = await a.put('/api/settings/photo/retention').send({ retentionDays: 0 });
+    expect(r3.status).toBe(400);
+    const r4 = await a.put('/api/settings/photo/retention').send({ retentionDays: 9999 });
+    expect(r4.status).toBe(400);
+  });
 });
 
 describe('PUT /api/settings/photo (admin toggle)', () => {

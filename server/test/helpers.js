@@ -20,6 +20,7 @@ export function resetDb() {
   // tests don't have to re-seed each one. Tests that mutate kiosks should
   // clean up after themselves.
   db.exec(`
+    DELETE FROM notifications_log;
     DELETE FROM visitor_bans;
     DELETE FROM visit_acknowledgments;
     DELETE FROM prereg_invitations;
@@ -32,7 +33,7 @@ export function resetDb() {
     DELETE FROM kiosks WHERE slug != 'default';
     UPDATE kiosks SET active = 1, default_printer_name = NULL, name = 'Reception' WHERE slug = 'default';
   `);
-  db.exec(`DELETE FROM sqlite_sequence WHERE name IN ('users', 'audit_log', 'visits', 'visitors', 'documents', 'visit_acknowledgments', 'prereg_invitations', 'visitor_bans')`);
+  db.exec(`DELETE FROM sqlite_sequence WHERE name IN ('users', 'audit_log', 'visits', 'visitors', 'documents', 'visit_acknowledgments', 'prereg_invitations', 'visitor_bans', 'notifications_log')`);
 
   // Bootstrap admin (admin/admin, must change password) — same as runtime bootstrap.
   const hash = bcrypt.hashSync('admin', 4);

@@ -163,6 +163,57 @@ describe('GET /api/visits/active (public — wall view)', () => {
   });
 });
 
+describe('GET /api/visits/active — wall_view.public privacy gate', () => {
+  beforeEach(resetDb);
+
+  test('public by default (no setting row, no auth)', async () => {
+    const host = seedHost();
+    await client().post('/api/visits').send({ visitorName: 'Alice', hostUserId: host.id });
+    const res = await client().get('/api/visits/active');
+    expect(res.status).toBe(200);
+  });
+
+  test('returns 401 to unauthenticated callers when wall_view.public is false', async () => {
+    const { setSetting } = await import('../src/services/settings.js');
+    setSetting('wall_view.public', false);
+    const host = seedHost();
+    await client().post('/api/visits').send({ visitorName: 'Alice', hostUserId: host.id });
+
+    const res = await client().get('/api/visits/active');
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/sign-in/i);
+  });
+
+  test('admin and security can still read the gated active list', async () => {
+    const { setSetting } = await import('../src/services/settings.js');
+    setSetting('wall_view.public', false);
+    const host = seedHost();
+    await client().post('/api/visits').send({ visitorName: 'Alice', hostUserId: host.id });
+
+    const { adminAgent, agentFor, createUser } = await import('./helpers.js');
+    const a = await adminAgent();
+    expect((await a.get('/api/visits/active')).status).toBe(200);
+
+    createUser({ username: 'sec', password: 'AAaa1234567', role: 'security' });
+    const sec = await agentFor('sec', 'AAaa1234567');
+    expect((await sec.get('/api/visits/active')).status).toBe(200);
+  });
+
+  test('admin can flip the toggle via /api/settings/wall-view', async () => {
+    const { adminAgent } = await import('./helpers.js');
+    const a = await adminAgent();
+    const before = await a.get('/api/settings/wall-view');
+    expect(before.body).toEqual({ public: true });
+
+    const put = await a.put('/api/settings/wall-view').send({ public: false });
+    expect(put.status).toBe(200);
+
+    // Now an unauthenticated client should be locked out.
+    const out = await client().get('/api/visits/active');
+    expect(out.status).toBe(401);
+  });
+});
+
 describe('POST /api/visits/:id/sign-out', () => {
   beforeEach(resetDb);
 

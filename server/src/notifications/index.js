@@ -27,13 +27,13 @@ export async function notifyVisitEvent(event, { visit, actor = null } = {}) {
   const tasks = [];
   if (emailEnabled() && wantsChannel('email', event) && host.email) {
     tasks.push(
-      sendEmail({ to: host.email, subject, text: body })
+      sendEmail({ to: host.email, subject, text: body, event })
         .catch(err => logger.error({ err: err.message, event, hostId: host.id }, 'email notify failed'))
     );
   }
   if (smsEnabled() && wantsChannel('sms', event) && host.phone) {
     tasks.push(
-      sendSms({ to: host.phone, body: `${subject}\n${body}` })
+      sendSms({ to: host.phone, body: `${subject}\n${body}`, event })
         .catch(err => logger.error({ err: err.message, event, hostId: host.id }, 'sms notify failed'))
     );
   }
@@ -84,13 +84,13 @@ export async function notifySigninBlocked({ ban, attempt }) {
   for (const r of recipients) {
     if (emailEnabled() && wantsChannel('email', 'signin_blocked') && r.email) {
       tasks.push(
-        sendEmail({ to: r.email, subject, text: body })
+        sendEmail({ to: r.email, subject, text: body, event: 'signin_blocked' })
           .catch(err => logger.error({ err: err.message, userId: r.id }, 'signin_blocked email failed'))
       );
     }
     if (smsEnabled() && wantsChannel('sms', 'signin_blocked') && r.phone) {
       tasks.push(
-        sendSms({ to: r.phone, body: `${subject}\n${attempt.visitorName ?? '—'} blocked at ${attempt.kioskSlug ?? 'default'} kiosk` })
+        sendSms({ to: r.phone, body: `${subject}\n${attempt.visitorName ?? '—'} blocked at ${attempt.kioskSlug ?? 'default'} kiosk`, event: 'signin_blocked' })
           .catch(err => logger.error({ err: err.message, userId: r.id }, 'signin_blocked sms failed'))
       );
     }

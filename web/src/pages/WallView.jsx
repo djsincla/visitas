@@ -11,15 +11,17 @@ import { api } from '../api.js';
  */
 export default function WallView() {
   const { appName, logoUrl } = useBranding();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['visits-wall'],
     queryFn: () => api.get('/api/visits/active'),
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
+    retry: (count, err) => err?.status !== 401 && count < 3,
   });
 
   const visits = data?.visits ?? [];
   const asOf = data?.asOf ? new Date(data.asOf) : new Date();
+  const authRequired = error?.status === 401;
 
   return (
     <div className="wall-wrap">
@@ -34,7 +36,12 @@ export default function WallView() {
       </header>
 
       {isLoading && <div className="wall-empty">Loading…</div>}
-      {!isLoading && visits.length === 0 && (
+      {!isLoading && authRequired && (
+        <div className="wall-empty">
+          Sign-in required. The administrator has set the wall view to admins/security only.
+        </div>
+      )}
+      {!isLoading && !authRequired && visits.length === 0 && (
         <div className="wall-empty">No visitors currently signed in.</div>
       )}
 
