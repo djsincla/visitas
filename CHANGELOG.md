@@ -4,6 +4,48 @@ All notable changes to visitas.world are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses semantic versioning.
 
+## [1.5.0] — 2026-05-08
+
+GDPR right-to-be-forgotten + a documented backup story. Two of the
+operational items from the v1.0 review (#8 + #9). One is a real feature
+(per-visitor purge), the other is pure docs (operator guidance).
+
+### Added
+- **`DELETE /api/visitors/:id`** (admin only) &mdash; GDPR Art. 17
+  purge. Atomic transaction that scrubs PII off every visit,
+  acknowledgment, invitation, and notification-log row tied to the
+  visitor; deletes their signature + photo files from disk; nulls
+  the `visitor_id` link on any visitor-mode bans (the ban itself
+  survives in the audit story); deletes the `visitors` row. Visit
+  timestamps + host references are kept so the sign-in /
+  fire-roster history isn&rsquo;t broken &mdash; only the personal
+  data goes. Records a `visitor_purged` audit entry with the actor
+  + reason + counts, plus also nulls `audit_log.details` for any
+  row about an affected visit and any `visit_signin_blocked` row
+  whose JSON details reference the visitor email (so personal data
+  doesn&rsquo;t survive in the audit row payload either, while the
+  audit shape is preserved). Body accepts optional `{ reason }` for
+  the audit row.
+- **Admin Visitors page** has a **Purge** action per row (red
+  button next to Ban). The modal explains the consequence and
+  requires the operator to type the visitor&rsquo;s email (or
+  name if no email) to confirm.
+- **Backup + restore documentation** in README. What&rsquo;s in
+  `data/`, why `cp` of a live SQLite is unsafe, an
+  `sqlite3 .backup` example, a nightly cron + retention script, the
+  restore procedure, and a quarterly verify-the-backup-actually-works
+  step.
+
+### Tests
+- **15 new tests** in `test/visitorPurge.test.js` covering: scrubs
+  visit PII while keeping audit shape, deletes the visitors row,
+  deletes photo / signature files, catches legacy visits with
+  matching email but null `visitor_id`, scrubs invitations +
+  notifications log, unlinks visitor-mode bans, writes the audit
+  row with counts, nulls audit details for affected visits, plus
+  the four route-level cases (admin OK, 404 on unknown, security
+  refused, unauthenticated refused). Suite at 236/236.
+
 ## [1.4.0] — 2026-05-08
 
 Security pass &mdash; the rest of the v1.0 review. Tightens the session

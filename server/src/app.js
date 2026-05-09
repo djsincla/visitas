@@ -34,10 +34,10 @@ export function createApp({ httpLogger = true } = {}) {
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
 
-  app.get('/api/health', (_req, res) => res.json({ ok: true, version: '1.4.0' }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, version: '1.5.0' }));
   app.get('/api', (_req, res) => res.json({
     name: 'visitas',
-    version: '1.4.0',
+    version: '1.5.0',
     endpoints: [
       'POST /api/auth/login',
       'POST /api/auth/logout',
@@ -72,6 +72,7 @@ export function createApp({ httpLogger = true } = {}) {
       'DELETE /api/documents/:kind (admin — deactivate)',
       'POST /api/visitors/lookup (public — returning-visitor pre-fill + NDA cache)',
       'GET  /api/visitors (admin)',
+      'DELETE /api/visitors/:id (admin — GDPR right-to-be-forgotten purge)',
       'GET  /api/invitations/:token (public — kiosk claim pre-fill)',
       'GET  /api/invitations (admin)',
       'POST /api/invitations (admin — sends email with QR)',

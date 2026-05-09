@@ -267,6 +267,20 @@
       <p class="muted">Shipped.</p>
     </article>
 
+    <article>
+      <h3>v1.5 — GDPR purge + backup docs</h3>
+      <p>
+        Per-visitor right-to-be-forgotten endpoint
+        (<code>DELETE /api/visitors/:id</code>) that scrubs PII from
+        every visit, invitation, and notification log entry while
+        preserving the workshop&rsquo;s audit shape. Plus a real
+        backup + restore section in the README (what&rsquo;s in
+        <code>data/</code>, hot-backup with <code>sqlite3 .backup</code>,
+        nightly cron, restore procedure).
+      </p>
+      <p class="muted">Shipped.</p>
+    </article>
+
   </div>
 </section>
 

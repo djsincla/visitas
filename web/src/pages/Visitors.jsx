@@ -6,6 +6,7 @@ import BanModal from '../components/BanModal.jsx';
 export default function Visitors() {
   const qc = useQueryClient();
   const [banTarget, setBanTarget] = useState(null);
+  const [purgeTarget, setPurgeTarget] = useState(null);
   const { data, isLoading } = useQuery({
     queryKey: ['visitors'],
     queryFn: () => api.get('/api/visitors'),
@@ -54,12 +55,20 @@ export default function Visitors() {
                       ? <span className="badge muted" title={`v${v.ndaCacheVersion} signed ${v.ndaCacheAcknowledgedAt}`}>v{v.ndaCacheVersion} fresh</span>
                       : <span className="muted" style={{ fontSize: 12 }}>—</span>}
                   </td>
-                  <td style={{ textAlign: 'right' }}>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button
                       className="secondary"
                       onClick={() => setBanTarget({ visitorId: v.id, visitorName: v.name, company: v.company, email: v.email })}
                     >
                       Ban
+                    </button>
+                    <button
+                      className="danger"
+                      style={{ marginLeft: 8 }}
+                      onClick={() => setPurgeTarget(v)}
+                      title="GDPR right-to-be-forgotten — deletes the visitor record + scrubs PII from past visits"
+                    >
+                      Purge
                     </button>
                   </td>
                 </tr>
@@ -76,7 +85,90 @@ export default function Visitors() {
           onSaved={() => { setBanTarget(null); qc.invalidateQueries({ queryKey: ['visitors'] }); }}
         />
       )}
+
+      {purgeTarget && (
+        <PurgeModal
+          visitor={purgeTarget}
+          onClose={() => setPurgeTarget(null)}
+          onPurged={() => {
+            setPurgeTarget(null);
+            qc.invalidateQueries({ queryKey: ['visitors'] });
+          }}
+        />
+      )}
     </>
+  );
+}
+
+function PurgeModal({ visitor, onClose, onPurged }) {
+  const [reason, setReason] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const expectedConfirm = visitor.email || visitor.name;
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (confirm !== expectedConfirm) {
+      setErr(`Type "${expectedConfirm}" to confirm.`);
+      return;
+    }
+    setErr(null); setBusy(true);
+    try {
+      const res = await fetch(`/api/visitors/${visitor.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason || null }),
+      });
+      const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null;
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      onPurged(data);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <h2>Purge {visitor.name}</h2>
+        <p className="muted">
+          GDPR Art. 17 right-to-be-forgotten. <strong>This is irreversible.</strong> Deletes the visitor record and removes
+          name, company, email, phone, signature, and photo from every past visit, invitation, and notification log entry
+          tied to this visitor. Visit timestamps + host + sign-in/out shape are kept so the audit trail isn&rsquo;t broken.
+          Active bans referencing the visitor stay active but lose their visitor-id link.
+        </p>
+        <form onSubmit={submit}>
+          <label htmlFor="purge-reason">Reason (optional, recorded in audit log)</label>
+          <input
+            id="purge-reason"
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            placeholder="e.g. subject access request 2026-05"
+            maxLength={512}
+          />
+          <label htmlFor="purge-confirm" style={{ marginTop: 12 }}>
+            Type <code>{expectedConfirm}</code> to confirm
+          </label>
+          <input
+            id="purge-confirm"
+            value={confirm}
+            onChange={e => setConfirm(e.target.value)}
+            autoComplete="off"
+          />
+          {err && <div className="error" style={{ marginTop: 8 }}>{err}</div>}
+          <div className="row" style={{ gap: 8, marginTop: 12 }}>
+            <button type="submit" className="danger" disabled={busy || confirm !== expectedConfirm}>
+              {busy ? 'Purging…' : 'Purge visitor'}
+            </button>
+            <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 

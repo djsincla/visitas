@@ -31,8 +31,10 @@ For a higher-level overview of what the project is, who it's for, and what it de
 - [Visitor bans](#visitor-bans)
 - [Notifications log](#notifications-log)
 - [Wall-view privacy](#wall-view-privacy)
+- [Right-to-be-forgotten purge](#right-to-be-forgotten-purge)
+- [Backup and restore](#backup-and-restore)
 - [Active Directory](#active-directory)
-- [API reference (v1.4)](#api-reference-v13)
+- [API reference (v1.5)](#api-reference-v13)
 - [Development](#development)
 - [Testing](#testing)
 - [License](#license)
@@ -309,6 +311,80 @@ view shows &ldquo;Sign-in required&rdquo; until someone authenticates on that
 iPad. Trade-off: a hallway iPad in privacy mode must be parked on a
 long-lived security session, or replaced with a printed sheet.
 
+## Right-to-be-forgotten purge
+
+Admins can purge a visitor&rsquo;s personal data via **Admin &rarr; Visitors &rarr; Purge** (or `DELETE /api/visitors/:id`). This is GDPR Art. 17 in code form: the visitor record is deleted; every past visit, acknowledgment, invitation, and notification log entry tied to them gets PII scrubbed (`visitor_name = '[purged]'`, email/phone/company/signed-name nulled, signature + photo files unlinked from disk). Visit timestamps + host references stay so the workshop&rsquo;s sign-in / fire-roster history isn&rsquo;t broken &mdash; only the personal data is removed. Active visitor-mode bans referencing the purged visitor stay active but lose their `visitor_id` link. The purge writes a `visitor_purged` audit row carrying the actor + reason + counts so you have an immutable record of *what was removed and when*.
+
+The purge is irreversible; the admin UI requires typing the visitor&rsquo;s email (or name, for emailless visitors) to confirm.
+
+## Backup and restore
+
+The entire workshop&rsquo;s state lives in `data/`:
+
+- `data/visitas.sqlite` &mdash; primary database (WAL mode)
+- `data/visitas.sqlite-wal` + `data/visitas.sqlite-shm` &mdash; WAL files (must be backed up alongside the main file or the backup is incomplete)
+- `data/photos/` &mdash; visitor photos referenced by visit rows
+- `data/signatures/` &mdash; NDA + safety signature PNGs
+- `data/uploads/` &mdash; admin-uploaded branding logos
+
+### Hot backup
+
+The safe way to copy a live SQLite database is `sqlite3 .backup`, which takes a transactionally consistent snapshot without blocking writers:
+
+```bash
+sqlite3 data/visitas.sqlite ".backup '/path/to/backups/visitas-$(date +%Y%m%d-%H%M%S).sqlite'"
+tar -czf /path/to/backups/visitas-files-$(date +%Y%m%d-%H%M%S).tar.gz \
+  data/photos/ data/signatures/ data/uploads/
+```
+
+`cp data/visitas.sqlite ...` is **not safe** while the server is running &mdash; it can capture the main file mid-write while the WAL hasn&rsquo;t been merged, producing an inconsistent backup that won&rsquo;t open cleanly.
+
+### Nightly cron
+
+```cron
+# /etc/cron.d/visitas-backup — run as the user that owns the visitas data dir
+0 2 * * * visitas /usr/local/bin/visitas-backup.sh
+```
+
+```bash
+#!/usr/bin/env bash
+# /usr/local/bin/visitas-backup.sh
+set -euo pipefail
+SRC=/opt/visitas/data
+DEST=/var/backups/visitas
+STAMP=$(date +%Y%m%d-%H%M%S)
+mkdir -p "$DEST"
+
+sqlite3 "$SRC/visitas.sqlite" ".backup '$DEST/visitas-$STAMP.sqlite'"
+tar -czf "$DEST/visitas-files-$STAMP.tar.gz" -C "$SRC" photos signatures uploads
+
+# Retain 30 days.
+find "$DEST" -type f -mtime +30 -delete
+```
+
+### Restore
+
+```bash
+docker compose down
+rm -rf /opt/visitas/data/*
+cp /var/backups/visitas/visitas-YYYYMMDD-HHMMSS.sqlite /opt/visitas/data/visitas.sqlite
+tar -xzf /var/backups/visitas/visitas-files-YYYYMMDD-HHMMSS.tar.gz -C /opt/visitas/data
+chown -R 10001:10001 /opt/visitas/data   # the non-root container user
+docker compose up -d
+```
+
+The first start after a restore will run any pending migrations on the snapshotted DB &mdash; safe even if the backup is from an older app version.
+
+### Verify the backup actually works
+
+A backup you&rsquo;ve never restored is a hope, not a backup. Once a quarter:
+
+```bash
+sqlite3 /var/backups/visitas/visitas-LATEST.sqlite "PRAGMA integrity_check; SELECT count(*) FROM visits;"
+```
+
+A clean `ok` plus a non-zero visit count is enough confirmation for a small workshop.
+
 ## Active Directory
 
 AD is opt-in via `config/auth.json`. With `auth.ad.enabled = true` and the bind password supplied via the `AD_BIND_PASSWORD` env var, login attempts that don't match a local user fall through to LDAP:
@@ -346,7 +422,7 @@ On first AD login, visitas creates a `users` row with `source='ad'`, `role='admi
 
 `POST /api/auth/change-password` refuses for `source='ad'` accounts (returns 400 with `"AD-authenticated users must change password in AD"`) — those accounts have no local password to change.
 
-## API reference (v1.4)
+## API reference (v1.5)
 
 `GET /api` returns a live endpoint index.
 
@@ -423,6 +499,7 @@ On first AD login, visitas creates a `users` row with `source='ad'`, `role='admi
 ### Visitors — `/api/visitors`
 - `POST /lookup` — **public** — `{email}` → returning-visitor pre-fill payload (name / company / phone / `ndaCacheFresh` / `ndaCacheVersion`). 404 on unknown email.
 - `GET /` (admin) — list every visitor with derived visit count + NDA cache state.
+- `DELETE /:id` (admin) — GDPR right-to-be-forgotten purge. Optional `{ reason }` body for audit. Returns counts: `{ visitorId, visitsScrubbed, acksScrubbed, invitationsScrubbed, notificationsLogScrubbed, bansUnlinked, photosDeleted, signaturesDeleted }`. Idempotent: 404 on already-purged.
 
 ### Invitations — `/api/invitations`
 - `GET /:token` — **public, sanitized** — kiosk reads invitation by token. 410 for `used` / `cancelled` / `expired`.
