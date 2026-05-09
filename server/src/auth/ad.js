@@ -25,6 +25,28 @@ export function adEnabled() {
 }
 
 /**
+ * Throws when AD is enabled but the bind password is missing. Otherwise an
+ * empty bind password against most LDAP servers results in an *anonymous
+ * bind* — which can succeed and then return wrong-looking results, so the
+ * service silently degrades to "every login fails" or "every login succeeds
+ * as the anonymous user." Better to refuse to start.
+ *
+ * Called from runtime startup (index.js) and from authenticateAD() so test
+ * paths and CLI tools that don't go through startup still hit the check.
+ */
+export function assertAdBindCredentials() {
+  if (!adEnabled()) return;
+  const bindDN = config.auth?.ad?.bindDN;
+  if (bindDN && !config.adBindPassword) {
+    throw new Error(
+      'AD is enabled and config.auth.ad.bindDN is set, but the AD_BIND_PASSWORD env var is empty. ' +
+      'Refusing to start to prevent an anonymous bind that would silently misauthenticate users. ' +
+      'Set AD_BIND_PASSWORD or set config.auth.ad.enabled=false.',
+    );
+  }
+}
+
+/**
  * Authenticate against AD/LDAP.
  *
  * Returns:
@@ -36,6 +58,7 @@ export function adEnabled() {
 export async function authenticateAD(username, password) {
   const ad = config.auth?.ad;
   if (!ad?.enabled) return null;
+  assertAdBindCredentials();
 
   const client = newClient();
 

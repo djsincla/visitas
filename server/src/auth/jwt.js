@@ -18,7 +18,12 @@ export const COOKIE_NAME = 'visitas_session';
 export function cookieOptions() {
   return {
     httpOnly: true,
-    sameSite: 'lax',
+    // 'strict' rather than 'lax': the visitor app has no cross-site
+    // navigation we want to carry the session for. A user clicking an
+    // /admin/... link from email will hit the SPA logged-out and need to
+    // sign in — that's a fair price for closing the lax-cookie CSRF gap
+    // on any future GET-with-side-effects endpoint.
+    sameSite: 'strict',
     secure: config.env === 'production',
     maxAge: config.jwt.ttlSeconds * 1000,
     path: '/',

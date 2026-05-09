@@ -3,6 +3,14 @@ import { logger } from './logger.js';
 import { runMigrations, bootstrapAdmin, seedDocumentsFromConfig } from './db/migrate.js';
 import { createApp } from './app.js';
 import { startPhotoRetentionSweep } from './services/photo.js';
+import { assertAdBindCredentials } from './auth/ad.js';
+
+try {
+  assertAdBindCredentials();
+} catch (err) {
+  logger.fatal({ err: err.message }, 'AD configuration check failed');
+  process.exit(1);
+}
 
 runMigrations();
 bootstrapAdmin();

@@ -32,7 +32,7 @@ For a higher-level overview of what the project is, who it's for, and what it de
 - [Notifications log](#notifications-log)
 - [Wall-view privacy](#wall-view-privacy)
 - [Active Directory](#active-directory)
-- [API reference (v1.3)](#api-reference-v13)
+- [API reference (v1.4)](#api-reference-v13)
 - [Development](#development)
 - [Testing](#testing)
 - [License](#license)
@@ -333,7 +333,7 @@ Restart visitas after editing the config. Per-deployment notes:
 
 - **`searchFilter`** uses `(&(objectCategory=person)(objectClass=user)…)` so machine / computer accounts are excluded — only human users in the workshop's AD can log in. Adjust if you're on OpenLDAP or FreeIPA (those use `uid={username}` instead of `sAMAccountName={username}`).
 - **`allowedGroup`** is a case-insensitive **substring** match against each `memberOf` DN. The default `visitas-world` matches `cn=Visitas-World,ou=Groups,dc=example,dc=com`. Empty / unset = any AD user can log in (rare; the workshop normally pins to a single group).
-- **`bindDN`** is a service account in AD with read access to the search base. The bind password lives in env (`AD_BIND_PASSWORD`), never in JSON.
+- **`bindDN`** is a service account in AD with read access to the search base. The bind password lives in env (`AD_BIND_PASSWORD`), never in JSON. **The server refuses to start when `ad.enabled=true` and `bindDN` is set but `AD_BIND_PASSWORD` is empty** &mdash; an empty bind password against most LDAP servers results in an anonymous bind that can silently misauthenticate users.
 - **Local takes precedence**. If a local account and an AD account share a username, login uses the local account's password. The bootstrap admin (`admin/admin`) is always local — if AD is down or misconfigured, the workshop can still log in.
 
 ### What an AD login does
@@ -346,7 +346,7 @@ On first AD login, visitas creates a `users` row with `source='ad'`, `role='admi
 
 `POST /api/auth/change-password` refuses for `source='ad'` accounts (returns 400 with `"AD-authenticated users must change password in AD"`) — those accounts have no local password to change.
 
-## API reference (v1.3)
+## API reference (v1.4)
 
 `GET /api` returns a live endpoint index.
 

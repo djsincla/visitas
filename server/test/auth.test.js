@@ -15,6 +15,14 @@ describe('POST /api/auth/login', () => {
     expect(res.body.token).toMatch(/^[\w-]+\.[\w-]+\.[\w-]+$/);
   });
 
+  test('session cookie is HttpOnly + SameSite=Strict (CSRF defense)', async () => {
+    const res = await client().post('/api/auth/login').send({ username: 'admin', password: 'admin' });
+    const cookie = (res.headers['set-cookie'] ?? []).find(c => c.startsWith('visitas_session='));
+    expect(cookie).toBeTruthy();
+    expect(cookie).toMatch(/HttpOnly/i);
+    expect(cookie).toMatch(/SameSite=Strict/i);
+  });
+
   test('rejects bad password', async () => {
     const res = await client().post('/api/auth/login').send({ username: 'admin', password: 'wrong' });
     expect(res.status).toBe(401);

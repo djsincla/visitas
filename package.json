@@ -1,6 +1,6 @@
 {
   "name": "visitas",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Visitor sign-in / registration for small workshops",
   "license": "Apache-2.0",

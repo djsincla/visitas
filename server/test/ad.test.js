@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import { resetDb, client, row } from './helpers.js';
 import { config } from '../src/config.js';
-import { setClientFactoryForTests, userInAllowedGroup } from '../src/auth/ad.js';
+import { setClientFactoryForTests, userInAllowedGroup, assertAdBindCredentials } from '../src/auth/ad.js';
 
 const ORIGINAL_AUTH = JSON.parse(JSON.stringify(config.auth));
 
@@ -30,6 +30,8 @@ function fakeFactory({ entry, userBindRejects = false } = {}) {
   };
 }
 
+const ORIGINAL_BIND_PW = config.adBindPassword;
+
 function configureAD(overrides = {}) {
   config.auth = JSON.parse(JSON.stringify(ORIGINAL_AUTH));
   config.auth.ad = {
@@ -43,7 +45,50 @@ function configureAD(overrides = {}) {
     attributes: { username: 'sAMAccountName', email: 'mail', displayName: 'displayName' },
     ...overrides,
   };
+  // Provide a non-empty bind password by default so existing tests don't trip
+  // the assertAdBindCredentials() guard. Tests that exercise the missing-
+  // password path explicitly clear it.
+  config.adBindPassword = 'test-bind-pw';
 }
+
+describe('assertAdBindCredentials', () => {
+  afterEach(() => {
+    config.auth = JSON.parse(JSON.stringify(ORIGINAL_AUTH));
+    config.adBindPassword = ORIGINAL_BIND_PW;
+  });
+
+  test('no-op when AD is disabled', () => {
+    config.auth = { ...ORIGINAL_AUTH, ad: { enabled: false } };
+    expect(() => assertAdBindCredentials()).not.toThrow();
+  });
+
+  test('no-op when bindDN is unset (anonymous-bind by design)', () => {
+    configureAD({ bindDN: undefined });
+    const original = config.adBindPassword;
+    config.adBindPassword = '';
+    try { expect(() => assertAdBindCredentials()).not.toThrow(); }
+    finally { config.adBindPassword = original; }
+  });
+
+  test('throws when AD enabled, bindDN set, bind password empty', () => {
+    configureAD();
+    const original = config.adBindPassword;
+    config.adBindPassword = '';
+    try {
+      expect(() => assertAdBindCredentials()).toThrow(/AD_BIND_PASSWORD/);
+    } finally {
+      config.adBindPassword = original;
+    }
+  });
+
+  test('passes when bind password is present', () => {
+    configureAD();
+    const original = config.adBindPassword;
+    config.adBindPassword = 'svc-pass';
+    try { expect(() => assertAdBindCredentials()).not.toThrow(); }
+    finally { config.adBindPassword = original; }
+  });
+});
 
 describe('userInAllowedGroup', () => {
   test('matches case-insensitive substring on DN', () => {
@@ -65,6 +110,7 @@ describe('AD login', () => {
   afterEach(() => {
     setClientFactoryForTests(null);
     config.auth = JSON.parse(JSON.stringify(ORIGINAL_AUTH));
+    config.adBindPassword = ORIGINAL_BIND_PW;
   });
 
   test('AD user in visitas-world group → success → upserted as admin/source=ad', async () => {
@@ -174,6 +220,19 @@ describe('AD login', () => {
 
     const res = await client().post('/api/auth/login').send({ username: 'alice', password: 'wrong' });
     expect(res.status).toBe(401);
+  });
+
+  test('enabled AD with empty bind password → authenticateAD throws (defense in depth)', async () => {
+    configureAD();
+    const original = config.adBindPassword;
+    config.adBindPassword = '';
+    try {
+      const res = await client().post('/api/auth/login').send({ username: 'alice', password: 'secret' });
+      // Login surfaces an internal error as 503 (handled in routes/auth.js).
+      expect([500, 503]).toContain(res.status);
+    } finally {
+      config.adBindPassword = original;
+    }
   });
 
   test('AD upserted user appears in /api/hosts after login', async () => {

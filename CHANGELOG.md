@@ -4,6 +4,46 @@ All notable changes to visitas.world are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 uses semantic versioning.
 
+## [1.4.0] — 2026-05-08
+
+Security pass &mdash; the rest of the v1.0 review. Tightens the session
+cookie&rsquo;s `SameSite` attribute, refuses to start with an enabled-but-
+unauthenticated AD config, and confirms (via existing tests) that the PNG
+magic-byte check covers signatures as well as photos. No new surface; this
+is hardening.
+
+### Changed
+- **Session cookie is now `SameSite=Strict`** instead of `Lax`. Closes
+  any latent CSRF gap that a future GET-with-side-effects endpoint
+  could open. Trade-off: an admin clicking an `/admin/...` link from
+  outside the SPA (e.g. an email) will hit the page logged-out and
+  need to sign in &mdash; fair price for a LAN-only app.
+- **AD configuration is validated at startup** (`assertAdBindCredentials`).
+  When `auth.ad.enabled = true` and `auth.ad.bindDN` is set but
+  `AD_BIND_PASSWORD` env is empty, the server logs a fatal error and
+  exits with code 1. Previously it would silently fall back to an
+  anonymous bind, which on most LDAP servers can succeed and return
+  wrong-looking results &mdash; a corner case that would silently
+  misauthenticate users. The same check also runs inside
+  `authenticateAD` as defense in depth (so CLI tools and tests that
+  bypass startup still hit it).
+
+### Verified (already in code from v1.1)
+- PNG magic-byte (`89 50 4E 47 0D 0A 1A 0A`) is enforced on **both**
+  the photo and signature paths via `assertPng()` in
+  `services/photo.js` and `services/visitAcknowledgments.js`.
+  Regression tests live in `test/photo.test.js` and
+  `test/documents.test.js`.
+
+### Tests
+- `test/auth.test.js` &mdash; new assertion that the session cookie
+  carries `HttpOnly` + `SameSite=Strict`.
+- `test/ad.test.js` &mdash; four new tests around
+  `assertAdBindCredentials` (no-op when disabled, no-op when bindDN
+  unset, throws when enabled with empty password, passes when
+  password is present), plus a defense-in-depth case showing
+  `authenticateAD` itself surfaces 503 when the bind password is empty.
+
 ## [1.3.0] — 2026-05-08
 
 Operational hardening pass. Four small-but-load-bearing improvements that
